@@ -130,11 +130,12 @@ class CaproverAPI:
         return CaproverAPI.check_errors(response)
 
     def create_full_app_with_custom_domain(
-        self, app_name: str, custom_domain: str, has_persistent_data: bool, **kwargs
+        self, app_name: str, has_persistent_data: bool, custom_domain: str, enable_ssl: bool = False, **kwargs
     ):
         self.create_app_with_custom_domain(
             app_name=app_name, custom_domain=custom_domain, has_persistent_data=has_persistent_data
         )
         time.sleep(0.10)
-        self.enable_ssl(app_name=app_name, custom_domain=custom_domain)
+        if enable_ssl:
+            self.enable_ssl(app_name=app_name, custom_domain=custom_domain)
         return self.update_app(app_name=app_name, **kwargs)

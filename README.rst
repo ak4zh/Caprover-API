@@ -26,7 +26,10 @@ unofficial caprover api to deploy apps to caprover
 Features
 --------
 
-* TODO
+* create app
+* update app with port mappings, env variables, repo info etc
+* add custom doamin
+* enable ssl
 
 Credits
 -------
