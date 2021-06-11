@@ -12,12 +12,12 @@ with open('HISTORY.rst') as history_file:
 
 requirements = [
     'requests>=2.25.1',
-    'PyYAML==5.4.1'
+    'PyYAML>=5.4.1'
 ]
 
 test_requirements = [
     'requests>=2.25.1',
-    'PyYAML==5.4.1'
+    'PyYAML>=5.4.1'
 ]
 
 setup(
