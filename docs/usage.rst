@@ -50,7 +50,7 @@ To use Caprover API in a project::
     cap.update_app(
         app_name='new-app',
         environment_variables=environment_variables,
-        persistent_directories=persistent_directories
+        persistent_directories=persistent_directories,
         port_mapping=port_mapping
     )
 
@@ -66,6 +66,26 @@ To use Caprover API in a project::
         custom_domain="my-app.example.com", enable_ssl=True
     )
 
+    # one click apps
+    # get app name from
+    # https://github.com/caprover/one-click-apps/tree/master/public/v4/apps
+
+    # automated deploy
+    app_variables = {"$$cap_redis_password": "REDIS-PASSWORD-HERE"}
+    cap.deploy_one_click_app(
+        one_click_app_name='redis',
+        namespace='new-app',
+        app_variables=app_variables,
+        automated=True
+    )
+
+    # manual deploy
+    # you will be asked to enter required variables during runtime
+    cap.deploy_one_click_app(
+        one_click_app_name='redis',
+        namespace='new-app',
+    )
+
     # to delete an app
     cap.delete_app(app_name="new-app")
 
@@ -79,3 +99,4 @@ To use Caprover API in a project::
 
     # to scale app to 3 instances
     cap.stop_app(app_name="new-app", instance_count=3)
+
