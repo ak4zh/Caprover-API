@@ -42,7 +42,7 @@ setup(
     packages=find_packages(include=['caprover_api', 'caprover_api.*']),
     test_suite='tests',
     tests_require=test_requirements,
-    url='https://github.com/ak4zh/caprover_api',
+    url='https://github.com/ak4zh/caprover-api',
     version='0.1.1',
     zip_safe=False,
 )
