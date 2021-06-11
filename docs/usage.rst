@@ -7,17 +7,24 @@ To use Caprover API in a project::
     from caprover_api import caprover_api
 
     cap = caprover_api.CaproverAPI(
-        dashboard_url="cap-dashboard-url", password="cap-dashboard-password"
+        dashboard_url="cap-dashboard-url",
+        password="cap-dashboard-password"
     )
 
     # to create a new app
-    cap.create_app(app_name="new-app", has_persistent_data=False)
+    cap.create_app(
+        app_name="new-app", has_persistent_data=False
+    )
 
     # to add domain a new app
-    cap.add_domain(app_name="new-app", custom_domain="my-app.example.com")
+    cap.add_domain(
+        app_name="new-app", custom_domain="my-app.example.com"
+    )
 
     # enable ssl
-    cap.enable_ssl(app_name='new-app', custom_domain='my-app.example.com')
+    cap.enable_ssl(
+        app_name='new-app', custom_domain='my-app.example.com'
+    )
 
     # add environment variables to app
     env_vars = {"key1": "val1", "key2": "val2"}
@@ -25,7 +32,9 @@ To use Caprover API in a project::
 
     # add environment variables and volumes to app
     environment_variables = {"key1": "val1", "key2": "val2"}
-    persistent_directories = ["volumeName:/pathInApp", "volumeNameTwo:/pathTwoInApp"]
+    persistent_directories = [
+        "volumeName:/pathInApp", "volumeNameTwo:/pathTwoInApp"
+    ]
     cap.update_app(
         app_name='new-app',
         environment_variables=environment_variables,
@@ -34,7 +43,9 @@ To use Caprover API in a project::
 
     # add environment variables and volumes to app
     environment_variables = {"key1": "val1", "key2": "val2"}
-    persistent_directories = ["volumeName:/pathInApp", "volumeNameTwo:/pathTwoInApp"]
+    persistent_directories = [
+        "volumeName:/pathInApp", "volumeNameTwo:/pathTwoInApp"
+    ]
     port_mapping = ["serverPort:containerPort", ]
     cap.update_app(
         app_name='new-app',

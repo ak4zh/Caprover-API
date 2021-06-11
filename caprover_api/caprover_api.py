@@ -141,6 +141,9 @@ class CaproverAPI:
             caprover_extras = service_data.get("caproverExtra", {})
             expose_as_web_app = True if caprover_extras.get(
                 "notExposeAsWebApp", 'false') == 'true' else False
+            container_http_port = int(
+                caprover_extras.get("containerHttpPort", 80)
+            )
 
             # create app
             self.create_app(
@@ -154,7 +157,8 @@ class CaproverAPI:
                 instance_count=1,
                 persistent_directories=persistent_directories,
                 environment_variables=environment_variables,
-                expose_as_web_app=expose_as_web_app
+                expose_as_web_app=expose_as_web_app,
+                container_http_port=container_http_port
             )
             data = {
                 "captainDefinitionContent": {
