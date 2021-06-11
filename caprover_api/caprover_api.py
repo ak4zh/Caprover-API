@@ -21,7 +21,7 @@ class CaproverAPI:
     ADD_CUSTOM_DOMAIN_PATH = '/api/v2/user/apps/appDefinitions/customdomain'
     UPDATE_APP_PATH = '/api/v2/user/apps/appDefinitions/update'
     ENABLE_SSL_PATH = '/api/v2/user/apps/appDefinitions/enablecustomdomainssl'
-    APP_DATA_PATH = '/api/v2/user/apps/appData/'
+    APP_DATA_PATH = '/api/v2/user/apps/appData'
 
     PUBLIC_APP_PATH = "https://raw.githubusercontent.com/" \
                       "caprover/one-click-apps/master/public/v4/apps/"
@@ -70,7 +70,7 @@ class CaproverAPI:
     ):
         raw_app_data = requests.get(
             CaproverAPI.PUBLIC_APP_PATH + one_click_app_name + ".yml"
-        ).content
+        ).text
         app_variables.update(
             {
                 "$$cap_appname": cap_app_name,
@@ -78,11 +78,12 @@ class CaproverAPI:
             }
         )
         _app_data = yaml.load(raw_app_data, Loader=Loader)
+
         variables = _app_data.get(
             "caproverOneClickApp", {}
         ).get("variables", {})
         for app_variable in variables:
-            if app_variable.get(app_variable['id']) is None:
+            if app_variables.get(app_variable['id']) is None:
                 default_value = app_variable.get('defaultValue', '')
                 is_random_hex = re.search(
                     r"\$\$cap_gen_random_hex\((\d+)\)", default_value or ""
@@ -99,7 +100,7 @@ class CaproverAPI:
                     default_value = input(ask_variable)
                 app_variables[app_variable['id']] = default_value
         for variable_id, variable_value in app_variables.items():
-            raw_app_data = raw_app_data.replace(variable_id, variable_value)
+            raw_app_data = raw_app_data.replace(variable_id, str(variable_value))
         return raw_app_data
 
     def get_system_info(self):
@@ -107,6 +108,34 @@ class CaproverAPI:
             self._build_url(CaproverAPI.SYSTEM_INFO_PATH), headers=self.headers
         )
         return CaproverAPI._check_errors(response)
+
+    def get_app_info(self, app_name):
+        logging.info("Getting app info...")
+        response = self.session.get(
+            self._build_url(CaproverAPI.APP_DATA_PATH) + '/' + app_name,
+            headers=self.headers
+        )
+        return CaproverAPI._check_errors(response)
+
+    def _wait_until_app_ready(self, app_name, timeout=60):
+        while timeout:
+            try:
+                app_info = self.get_app_info(app_name)
+                if not app_info.get("data", {}).get("isAppBuilding"):
+                    logging.info("App building finished...")
+                    return
+                logging.info("App is still building... sleeping for 1 second...")
+            except Exception as e:
+                logging.error(e)
+            timeout -= 1
+            time.sleep(1)
+        raise Exception("App building timeout reached")
+
+    def _ensure_app_build_success(self, app_name: str):
+        app_info = self.get_app_info(app_name)
+        if app_info.get("data", {}).get("isBuildFailed"):
+            raise Exception("App building failed")
+        return app_info
 
     def list_apps(self):
         response = self.session.get(
@@ -123,9 +152,19 @@ class CaproverAPI:
         return dict
 
     def deploy_one_click_app(
-        self, one_click_app_name: str, cap_app_name: str,
+        self, one_click_app_name: str, namespace: str,
         app_variables: dict = dict, automated: bool = False
     ):
+        """
+        :param one_click_app_name: one click app name
+        :param namespace: a namespace to use for all services
+            inside the one-click app
+        :param app_variables: dict containing required app variables
+        :param automated: set to true
+            if you have supplied all required variables
+        :return:
+        """
+        cap_app_name = "{}-{}".format(namespace, one_click_app_name)
         resolved_app_data = self._resolve_app_variables(
             one_click_app_name=one_click_app_name,
             cap_app_name=cap_app_name,
@@ -136,11 +175,11 @@ class CaproverAPI:
         services = app_data.get('services')
         for service_name, service_data in services.items():
             has_persistent_data = bool(service_data.get("volumes"))
-            persistent_directories = services.get("volumes", [])
+            persistent_directories = service_data.get("volumes", [])
             environment_variables = service_data.get("environment", {})
             caprover_extras = service_data.get("caproverExtra", {})
             expose_as_web_app = True if caprover_extras.get(
-                "notExposeAsWebApp", 'false') == 'true' else False
+                "notExposeAsWebApp", 'false') == 'false' else False
             container_http_port = int(
                 caprover_extras.get("containerHttpPort", 80)
             )
@@ -160,30 +199,38 @@ class CaproverAPI:
                 expose_as_web_app=expose_as_web_app,
                 container_http_port=container_http_port
             )
+
             data = {
                 "captainDefinitionContent": {
                     "schemaVersion": self.schema_version
                 },
                 "gitHash": ""
             }
-            image_name = service_data.get("imageName")
-            docker_file_lines = service_data.get(
-                "caproverExtra", {}
-            ).get("dockerfileLines")
+            image_name = service_data.get("image")
+            docker_file_lines = caprover_extras.get("dockerfileLines")
             if image_name:
                 data['captainDefinitionContent']['imageName'] = image_name
             elif docker_file_lines:
                 data['captainDefinitionContent'][
                     'dockerfileLines'
                 ] = docker_file_lines
-            data = json.dumps(data)
-            response = self.session.post(
-                self._build_url(
-                    CaproverAPI.APP_DATA_PATH
-                ) + '/' + service_name,
-                headers=self.headers, data=data
+            data['captainDefinitionContent'] = json.dumps(
+                data['captainDefinitionContent']
             )
-            self._check_errors(response)
+            return self.deploy_app(service_name, data)
+
+    def deploy_app(self, app_name: str, deploy_instructions: dict):
+        data = json.dumps(deploy_instructions)
+        response = self.session.post(
+            self._build_url(
+                CaproverAPI.APP_DATA_PATH
+            ) + '/' + app_name,
+            headers=self.headers, data=data
+        )
+        self._check_errors(response)
+        self._wait_until_app_ready(app_name=app_name, timeout=120)
+        time.sleep(1)
+        self._ensure_app_build_success(app_name=app_name)
 
     def _login(self):
         data = json.dumps({"password": self.password})
@@ -221,10 +268,14 @@ class CaproverAPI:
         )
         return CaproverAPI._check_errors(response)
 
-    def create_app(self, app_name: str, has_persistent_data: bool = False):
+    def create_app(
+        self, app_name: str, has_persistent_data: bool = False,
+        wait_for_app_build=True
+    ):
         """
-        :param app_name:
-        :param has_persistent_data:
+        :param app_name: app name
+        :param has_persistent_data: true if requires persistent data
+        :param wait_for_app_build: set false to skip waiting
         :return:
         """
         params = (
@@ -238,6 +289,8 @@ class CaproverAPI:
             self._build_url(CaproverAPI.APP_REGISTER_PATH),
             headers=self.headers, params=params, data=data
         )
+        if wait_for_app_build:
+            self._wait_until_app_ready(app_name=app_name)
         return CaproverAPI._check_errors(response)
 
     def add_domain(self, app_name: str, custom_domain: str):
@@ -308,9 +361,8 @@ class CaproverAPI:
         if persistent_directories:
             volumes = [
                 {
-                    "volumeName": volume_name, "containerPath": container_path
+                    "volumeName": volume_data.split(':')[0], "containerPath": volume_data.split(':')[1]
                 } for volume_data in persistent_directories
-                for volume_name, container_path in volume_data.split(":")
             ]
         else:
             volumes = None

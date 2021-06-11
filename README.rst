@@ -27,14 +27,13 @@ Features
 --------
 
 * create app
-* update app with port mappings, env variables, repo info etc
 * add custom doamin
 * enable ssl
-
-Credits
--------
-
-This package was created with Cookiecutter_ and the `audreyr/cookiecutter-pypackage`_ project template.
-
-.. _Cookiecutter: https://github.com/audreyr/cookiecutter
-.. _`audreyr/cookiecutter-pypackage`: https://github.com/audreyr/cookiecutter-pypackage
+* update app with port mappings, env variables, repo info etc
+* deploy one click apps
+* get list of all apps
+* get app by name
+* delete app
+* delete app ans it's volumes
+* stop app
+* scale app
