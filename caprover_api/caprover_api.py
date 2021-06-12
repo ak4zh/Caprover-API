@@ -98,7 +98,7 @@ class CaproverAPI:
                 is_valid = re.search(
                     app_variable.get('validRegex', '.*').strip('/'),
                     default_value
-                ) if default_value else False
+                ) if default_value is not None else False
                 is_invalid = not is_valid
                 if is_invalid:
                     if automated:
