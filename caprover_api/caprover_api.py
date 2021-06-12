@@ -392,8 +392,9 @@ class CaproverAPI:
         return CaproverAPI._check_errors(response.json())
 
     def create_app(
-        self, app_name: str, has_persistent_data: bool = False,
-        wait_for_app_build=True
+        self, app_name: str,
+        has_persistent_data: bool = False,
+        wait_for_app_build: bool = True
     ):
         """
         :param app_name: app name
@@ -554,7 +555,7 @@ class CaproverAPI:
         return CaproverAPI._check_errors(response.json())
 
     def create_and_update_app(
-        self, app_name: str, has_persistent_data: bool,
+        self, app_name: str, has_persistent_data: bool = False,
         custom_domain: str = None, enable_ssl: bool = False,
         image_name: str = None, docker_file_lines: list = None,
         instance_count: int = 1, **kwargs
@@ -571,6 +572,8 @@ class CaproverAPI:
                 :func:`~caprover_api.CaproverAPI.update_app`
         :return:
         """
+        if kwargs.get("persistent_directories"):
+            has_persistent_data = True
         response = self.create_app(
             app_name=app_name, has_persistent_data=has_persistent_data
         )
@@ -600,7 +603,9 @@ class CaproverAPI:
         return response
 
     def create_app_with_custom_domain(
-        self, app_name: str, has_persistent_data: bool, custom_domain: str
+        self, app_name: str,
+        custom_domain: str,
+        has_persistent_data: bool = False,
     ):
         """
         :param app_name: app name
@@ -615,7 +620,9 @@ class CaproverAPI:
         )
 
     def create_app_with_custom_domain_and_ssl(
-        self, app_name: str, has_persistent_data: bool, custom_domain: str
+        self, app_name: str,
+        custom_domain: str,
+        has_persistent_data: bool = False,
     ):
         """
         :param app_name: app name
