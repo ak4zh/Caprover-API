@@ -12,7 +12,31 @@ try:
 except ImportError:
     from yaml import Loader
 
-logging.basicConfig(level=logging.INFO)
+
+def retry(times: int, exceptions: tuple = Exception):
+    """
+    Retry Decorator
+    Retries the wrapped function/method `times` times if the exceptions listed
+    in ``exceptions`` are thrown
+    :param times: The number of times to repeat the wrapped function/method
+    :param exceptions: tuple of exceptions that trigger a retry attempt
+    """
+    def decorator(func):
+        def new_function(*args, **kwargs):
+            attempt = 0
+            while attempt < times:
+                try:
+                    return func(*args, **kwargs)
+                except exceptions:
+                    logging.error(
+                        'Exception thrown when attempting to run %s, attempt '
+                        '%d of %d' % (func, attempt, times)
+                    )
+                    attempt += 1
+                    time.sleep(1)
+            return func(*args, **kwargs)
+        return new_function
+    return decorator
 
 
 class CaproverAPI:
@@ -35,6 +59,8 @@ class CaproverAPI:
         NOT_FOUND = 1111
         AUTHENTICATION_FAILED = 1112
         STATUS_PASSWORD_BACK_OFF = 1113
+
+    COMMON_ERRORS = (requests.exceptions.ConnectionError, )
 
     LOGIN_PATH = '/api/v2/login'
     SYSTEM_INFO_PATH = "/api/v2/user/system/info"
@@ -143,12 +169,14 @@ class CaproverAPI:
             )
         return raw_app_data
 
+    @retry(times=3, exceptions=COMMON_ERRORS)
     def get_system_info(self):
         response = self.session.get(
             self._build_url(CaproverAPI.SYSTEM_INFO_PATH), headers=self.headers
         )
         return CaproverAPI._check_errors(response.json())
 
+    @retry(times=3, exceptions=COMMON_ERRORS)
     def get_app_info(self, app_name):
         logging.info("Getting app info...")
         response = self.session.get(
@@ -157,20 +185,12 @@ class CaproverAPI:
         )
         return CaproverAPI._check_errors(response.json())
 
-    def _wait_until_app_ready(self, app_name, timeout=60):
-        while timeout:
-            try:
-                app_info = self.get_app_info(app_name)
-                if not app_info.get("data", {}).get("isAppBuilding"):
-                    logging.info("App building finished...")
-                    return
-                logging.info(
-                    "App is still building... sleeping for 1 second..."
-                )
-            except Exception as e:
-                logging.error(e)
-            timeout -= 1
-            time.sleep(1)
+    @retry(times=60, exceptions=COMMON_ERRORS)
+    def _wait_until_app_ready(self, app_name):
+        app_info = self.get_app_info(app_name)
+        if not app_info.get("data", {}).get("isAppBuilding"):
+            logging.info("App building finished...")
+            return app_info
         raise Exception("App building timeout reached")
 
     def _ensure_app_build_success(self, app_name: str):
@@ -179,6 +199,7 @@ class CaproverAPI:
             raise Exception("App building failed")
         return app_info
 
+    @retry(times=3, exceptions=COMMON_ERRORS)
     def list_apps(self):
         response = self.session.get(
             self._build_url(CaproverAPI.APP_LIST_PATH),
@@ -273,6 +294,7 @@ class CaproverAPI:
             }
         )
 
+    @retry(times=3, exceptions=COMMON_ERRORS)
     def deploy_app(
         self, app_name: str,
         image_name: str = None,
@@ -307,11 +329,12 @@ class CaproverAPI:
             headers=self.headers, data=data
         )
         self._check_errors(response.json())
-        self._wait_until_app_ready(app_name=app_name, timeout=120)
+        self._wait_until_app_ready(app_name=app_name)
         time.sleep(0.50)
         self._ensure_app_build_success(app_name=app_name)
         return response.json()
 
+    @retry(times=3, exceptions=COMMON_ERRORS)
     def _login(self):
         data = json.dumps({"password": self.password})
         logging.info("Attempting to login to caprover dashboard...")
@@ -321,17 +344,19 @@ class CaproverAPI:
         )
         return CaproverAPI._check_errors(response.json())
 
+    @retry(times=3, exceptions=COMMON_ERRORS)
     def stop_app(self, app_name: str):
         return self.update_app(app_name=app_name, instance_count=0)
 
     def delete_app_matching_pattern(
-        self, app_name_pattern: str, delete_volumes: bool = False,
-        automated=False
+        self, app_name_pattern: str,
+        delete_volumes: bool = False,
+        automated: bool = False
     ):
         """
         :param app_name_pattern: regex pattern to match app name
         :param delete_volumes: set to true to delete volumes
-        :param automated: set to tru to disable confirmation
+        :param automated: set to true to disable confirmation
         :return:
         """
         app_list = self.list_apps()
@@ -359,6 +384,7 @@ class CaproverAPI:
             "status": CaproverAPI.Status.STATUS_OK
         }
 
+    @retry(times=3, exceptions=COMMON_ERRORS)
     def delete_app(self, app_name, delete_volumes: bool = False):
         """
         :param app_name: app name
@@ -391,6 +417,7 @@ class CaproverAPI:
         )
         return CaproverAPI._check_errors(response.json())
 
+    @retry(times=3, exceptions=COMMON_ERRORS)
     def create_app(
         self, app_name: str,
         has_persistent_data: bool = False,
@@ -417,6 +444,7 @@ class CaproverAPI:
             self._wait_until_app_ready(app_name=app_name)
         return CaproverAPI._check_errors(response.json())
 
+    @retry(times=3, exceptions=COMMON_ERRORS)
     def add_domain(self, app_name: str, custom_domain: str):
         """
         :param app_name:
@@ -431,6 +459,7 @@ class CaproverAPI:
         )
         return CaproverAPI._check_errors(response.json())
 
+    @retry(times=3, exceptions=COMMON_ERRORS)
     def enable_ssl(self, app_name: str, custom_domain: str):
         """
         :param app_name: app name
@@ -447,6 +476,7 @@ class CaproverAPI:
         )
         return CaproverAPI._check_errors(response.json())
 
+    @retry(times=3, exceptions=COMMON_ERRORS)
     def update_app(
         self, app_name: str, instance_count: int = None,
         captain_definition_path: str = None,
