@@ -397,23 +397,43 @@ class CaproverAPI:
         :param app_push_webhook:
         :return: dict
         """
+        current_app_info = self.get_app(app_name=app_name)
+
+        # handle environment_variables
+        # gets current envVars and overwrite with new data
+        current_env_vars = current_app_info["envVars"]
+        current_env_vars_as_dict = {
+            item['key']: item['value'] for item in current_env_vars
+        }
         if environment_variables:
-            env_vars = [
-                {
-                    "key": k, "value": v
-                } for k, v in environment_variables.items()
-            ]
-        else:
-            env_vars = None
+            current_env_vars_as_dict.update(environment_variables)
+        updated_environment_variables = [
+            {
+                "key": k, "value": v
+            } for k, v in current_env_vars_as_dict.items()
+        ]
+        current_app_info['envVars'] = updated_environment_variables
+
+        # handle volumes
+        # gets current volumes and overwrite with new data
+        current_volumes = current_app_info['volumes']
+        current_volumes_as_dict = {
+            item['volumeName']: item['containerPath'] for
+            item in current_volumes
+        }
         if persistent_directories:
-            volumes = [
-                {
-                    "volumeName": volume_data.split(':')[0],
-                    "containerPath": volume_data.split(':')[1]
-                } for volume_data in persistent_directories
-            ]
-        else:
-            volumes = None
+            for volume_pair in persistent_directories:
+                volume_name, container_path = volume_pair.split(':')
+                current_volumes_as_dict[volume_name] = container_path
+        updated_volumes = [
+            {
+                "volumeName": volume_name,
+                "containerPath": container_path
+            } for
+            volume_name, container_path in current_volumes_as_dict.items()
+        ]
+        current_app_info['volumes'] = updated_volumes
+
         if port_mapping:
             ports = [
                 {
@@ -431,23 +451,22 @@ class CaproverAPI:
             "notExposeAsWebApp": not expose_as_web_app,
             "forceSsl": force_ssl,
             "websocketSupport": support_websocket,
-            "volumes": volumes,
             "ports": ports,
             "containerHttpPort": container_http_port,
             "description": description,
             "appPushWebhook": app_push_webhook,
             "serviceUpdateOverride": service_update_override,
-            "envVars": env_vars
         }
-        data = {"appName": app_name}
         for k, v in _data.items():
             if v is None:
+                # skip as value not changed
                 continue
-            data[k] = v
+            # update current value with new value
+            current_app_info[k] = v
         logging.info("{} | Updating app info...".format(app_name))
         response = self.session.post(
             self._build_url(CaproverAPI.UPDATE_APP_PATH),
-            headers=self.headers, data=json.dumps(data)
+            headers=self.headers, data=json.dumps(current_app_info)
         )
         return CaproverAPI._check_errors(response)
 

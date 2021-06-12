@@ -27,13 +27,15 @@ Features
 --------
 
 * create app
-* add custom doamin
+* add custom domain
 * enable ssl
 * update app with port mappings, env variables, repo info etc
 * deploy one click apps
 * get list of all apps
 * get app by name
 * delete app
-* delete app ans it's volumes
+* delete app and it's volumes
 * stop app
 * scale app
+
+.. include:: docs/usage.rst
