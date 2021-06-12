@@ -100,7 +100,9 @@ class CaproverAPI:
                     default_value = input(ask_variable)
                 app_variables[app_variable['id']] = default_value
         for variable_id, variable_value in app_variables.items():
-            raw_app_data = raw_app_data.replace(variable_id, str(variable_value))
+            raw_app_data = raw_app_data.replace(
+                variable_id, str(variable_value)
+            )
         return raw_app_data
 
     def get_system_info(self):
@@ -124,7 +126,9 @@ class CaproverAPI:
                 if not app_info.get("data", {}).get("isAppBuilding"):
                     logging.info("App building finished...")
                     return
-                logging.info("App is still building... sleeping for 1 second...")
+                logging.info(
+                    "App is still building... sleeping for 1 second..."
+                )
             except Exception as e:
                 logging.error(e)
             timeout -= 1
@@ -244,6 +248,41 @@ class CaproverAPI:
     def stop_app(self, app_name: str):
         return self.update_app(app_name=app_name, instance_count=0)
 
+    def delete_app_matching_pattern(
+        self, app_name_pattern: str, delete_volumes: bool = False,
+        automated=False
+    ):
+        """
+        :param app_name_pattern: regex pattern to match app name
+        :param delete_volumes: set to true to delete volumes
+        :param automated: set to tru to disable confirmation
+        :return:
+        """
+        app_list = self.list_apps()
+        for app in app_list.get('data').get("appDefinitions"):
+            app_name = app['appName']
+            if re.search(app_name_pattern, app_name):
+                if not automated:
+                    confirmation = None
+                    while confirmation not in ['y', 'n', 'Y', 'N']:
+                        confirmation = input(
+                            "Do you want to delete app ({})?\n"
+                            "Answer (Y or N): ".format(
+                                app_name
+                            )
+                        )
+                    if confirmation.lower() == 'n':
+                        logging.info("Skipping app deletion...")
+                        continue
+                self.delete_app(
+                    app_name=app['appName'], delete_volumes=delete_volumes
+                )
+                time.sleep(0.20)
+        return {
+            "description": "All apps matching pattern deleted",
+            "status": 100
+        }
+
     def delete_app(self, app_name, delete_volumes: bool = False):
         """
         :param app_name: app name
@@ -251,6 +290,11 @@ class CaproverAPI:
         :return:
         """
         if delete_volumes:
+            logging.info(
+                "Deleting app {} and it's volumes...".format(
+                    app_name
+                )
+            )
             app = self.get_app(app_name=app_name)
             data = json.dumps(
                 {
@@ -261,6 +305,9 @@ class CaproverAPI:
                 }
             )
         else:
+            logging.info(
+                "Deleting app {}".format(app_name)
+            )
             data = json.dumps({"appName": app_name})
         response = requests.post(
             self._build_url(CaproverAPI.APP_DELETE_PATH),
@@ -361,7 +408,8 @@ class CaproverAPI:
         if persistent_directories:
             volumes = [
                 {
-                    "volumeName": volume_data.split(':')[0], "containerPath": volume_data.split(':')[1]
+                    "volumeName": volume_data.split(':')[0],
+                    "containerPath": volume_data.split(':')[1]
                 } for volume_data in persistent_directories
             ]
         else:

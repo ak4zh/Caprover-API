@@ -94,6 +94,21 @@ To use Caprover API in a project::
         app_name="new-app", delete_volumes=True
     )
 
+    # to delete apps matching regex pattern
+    # with confirmation
+    cap.delete_app_matching_pattern(
+        app_name_pattern=".*new-app.*",
+        delete_volumes=True
+    )
+
+    # to delete apps matching regex pattern
+    # ☠️ without confirmation
+    cap.delete_app_matching_pattern(
+        app_name_pattern=".*new-app.*",
+        delete_volumes=True,
+        automated=True
+    )
+
     # to stop an app temporarily
     cap.stop_app(app_name="new-app")
 
