@@ -49,6 +49,15 @@ create a new app::
     )
 
 
+deploy app from docker hub::
+
+    # app must already exists
+    cap.deploy_app(
+        app_name="new-app",
+        image_name='redis:5'
+    )
+
+
 App CRUD (Create, Update, Delete)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -128,6 +137,16 @@ create app with custom domain and enable ssl::
         has_persistent_data=False,
         custom_domain="my-app.example.com",
         enable_ssl=True
+    )
+
+
+create app and deploy redis from docker hub::
+
+    cap.create_and_update_app(
+        app_name="new-app",
+        has_persistent_data=False,
+        image_name='redis:5',
+        volumes=['new-app-redis-data:/data', ]
     )
 
 

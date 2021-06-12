@@ -11,6 +11,8 @@ try:
 except ImportError:
     from yaml import Loader
 
+logging.basicConfig(level=logging.INFO)
+
 
 class CaproverAPI:
     LOGIN_PATH = '/api/v2/login'
@@ -56,13 +58,13 @@ class CaproverAPI:
         return self.base_url + api_endpoint
 
     @staticmethod
-    def _check_errors(response):
-        description = response.json().get('description', '')
-        if response.json()['status'] != 100:
+    def _check_errors(response: dict):
+        description = response.get('description', '')
+        if response['status'] != 100:
             logging.error(description)
-            raise Exception(response.json()['description'])
+            raise Exception(response['description'])
         logging.info(description)
-        return response.json()
+        return response
 
     def _resolve_app_variables(
         self, one_click_app_name, cap_app_name,
@@ -92,12 +94,24 @@ class CaproverAPI:
                     default_value = secrets.token_hex(
                         int(is_random_hex.group(1))
                     )
-                if not default_value and not automated:
-                    ask_variable = "{label}:\n({description})\n".format(
-                        label=app_variable['label'],
-                        description=app_variable['description']
-                    )
-                    default_value = input(ask_variable)
+                is_valid = re.search(
+                    app_variable.get('validRegex', '.*').strip('/'),
+                    default_value
+                ) if default_value else False
+                is_invalid = not is_valid
+                if is_invalid:
+                    if automated:
+                        raise Exception(
+                            'Missing or Invalid value for >>{}<<'.format(
+                                app_variable['id']
+                            )
+                        )
+                    else:
+                        ask_variable = "{label} [{description}]: ".format(
+                            label=app_variable['label'],
+                            description=app_variable.get('description', '')
+                        )
+                        default_value = input(ask_variable)
                 app_variables[app_variable['id']] = default_value
         for variable_id, variable_value in app_variables.items():
             raw_app_data = raw_app_data.replace(
@@ -109,7 +123,7 @@ class CaproverAPI:
         response = self.session.get(
             self._build_url(CaproverAPI.SYSTEM_INFO_PATH), headers=self.headers
         )
-        return CaproverAPI._check_errors(response)
+        return CaproverAPI._check_errors(response.json())
 
     def get_app_info(self, app_name):
         logging.info("Getting app info...")
@@ -117,7 +131,7 @@ class CaproverAPI:
             self._build_url(CaproverAPI.APP_DATA_PATH) + '/' + app_name,
             headers=self.headers
         )
-        return CaproverAPI._check_errors(response)
+        return CaproverAPI._check_errors(response.json())
 
     def _wait_until_app_ready(self, app_name, timeout=60):
         while timeout:
@@ -146,18 +160,18 @@ class CaproverAPI:
             self._build_url(CaproverAPI.APP_LIST_PATH),
             headers=self.headers
         )
-        return CaproverAPI._check_errors(response)
+        return CaproverAPI._check_errors(response.json())
 
     def get_app(self, app_name: str):
         app_list = self.list_apps()
         for app in app_list.get('data').get("appDefinitions"):
             if app['appName'] == app_name:
                 return app
-        return dict
+        return {}
 
     def deploy_one_click_app(
         self, one_click_app_name: str, namespace: str,
-        app_variables: dict = dict, automated: bool = False
+        app_variables: dict = None, automated: bool = False
     ):
         """
         :param one_click_app_name: one click app name
@@ -168,6 +182,7 @@ class CaproverAPI:
             if you have supplied all required variables
         :return:
         """
+        app_variables = app_variables or {}
         cap_app_name = "{}-{}".format(namespace, one_click_app_name)
         resolved_app_data = self._resolve_app_variables(
             one_click_app_name=one_click_app_name,
@@ -177,64 +192,101 @@ class CaproverAPI:
         )
         app_data = yaml.load(resolved_app_data, Loader=Loader)
         services = app_data.get('services')
-        for service_name, service_data in services.items():
-            has_persistent_data = bool(service_data.get("volumes"))
-            persistent_directories = service_data.get("volumes", [])
-            environment_variables = service_data.get("environment", {})
-            caprover_extras = service_data.get("caproverExtra", {})
-            expose_as_web_app = True if caprover_extras.get(
-                "notExposeAsWebApp", 'false') == 'false' else False
-            container_http_port = int(
-                caprover_extras.get("containerHttpPort", 80)
-            )
+        apps_to_deploy = list(services.keys())
+        apps_deployed = []
+        while set(apps_to_deploy) != set(apps_deployed):
+            for service_name, service_data in services.items():
+                depends_on = service_data.get('depends_on', [])
+                if service_name in apps_deployed:
+                    logging.info("app already deployed")
+                    continue
+                if not set(depends_on).issubset(set(apps_deployed)):
+                    logging.info(
+                        "Skipping because {} depends on {}".format(
+                            service_name, ', '.join(depends_on)
+                        )
+                    )
+                    continue
+                has_persistent_data = bool(service_data.get("volumes"))
+                persistent_directories = service_data.get("volumes", [])
+                environment_variables = service_data.get("environment", {})
+                caprover_extras = service_data.get("caproverExtra", {})
+                expose_as_web_app = True if caprover_extras.get(
+                    "notExposeAsWebApp", 'false') == 'false' else False
+                container_http_port = int(
+                    caprover_extras.get("containerHttpPort", 80)
+                )
 
-            # create app
-            self.create_app(
-                app_name=service_name,
-                has_persistent_data=has_persistent_data
-            )
+                # create app
+                self.create_app(
+                    app_name=service_name,
+                    has_persistent_data=has_persistent_data
+                )
 
-            # update app
-            self.update_app(
-                app_name=service_name,
-                instance_count=1,
-                persistent_directories=persistent_directories,
-                environment_variables=environment_variables,
-                expose_as_web_app=expose_as_web_app,
-                container_http_port=container_http_port
-            )
-
-            data = {
-                "captainDefinitionContent": {
-                    "schemaVersion": self.schema_version
-                },
-                "gitHash": ""
+                # update app
+                self.update_app(
+                    app_name=service_name,
+                    instance_count=1,
+                    persistent_directories=persistent_directories,
+                    environment_variables=environment_variables,
+                    expose_as_web_app=expose_as_web_app,
+                    container_http_port=container_http_port
+                )
+                image_name = service_data.get("image")
+                docker_file_lines = caprover_extras.get("dockerfileLines")
+                self.deploy_app(
+                    service_name,
+                    image_name=image_name,
+                    docker_file_lines=docker_file_lines
+                )
+                apps_deployed.append(service_name)
+        return CaproverAPI._check_errors(
+            {
+                "status": 100,
+                "description": "Deployed all services in >>{}<<".format(
+                    one_click_app_name
+                )
             }
-            image_name = service_data.get("image")
-            docker_file_lines = caprover_extras.get("dockerfileLines")
-            if image_name:
-                data['captainDefinitionContent']['imageName'] = image_name
-            elif docker_file_lines:
-                data['captainDefinitionContent'][
-                    'dockerfileLines'
-                ] = docker_file_lines
-            data['captainDefinitionContent'] = json.dumps(
-                data['captainDefinitionContent']
-            )
-            return self.deploy_app(service_name, data)
+        )
 
-    def deploy_app(self, app_name: str, deploy_instructions: dict):
-        data = json.dumps(deploy_instructions)
+    def deploy_app(
+        self, app_name: str,
+        image_name: str = None,
+        docker_file_lines: list = None
+    ):
+        """
+        :param app_name: app name
+        :param image_name: docker hub image name
+        :param docker_file_lines: docker file lines as list
+        :return:
+        """
+        if image_name:
+            definition = {
+                "schemaVersion": self.schema_version,
+                "imageName": image_name
+            }
+        elif docker_file_lines:
+            definition = {
+                "schemaVersion": self.schema_version,
+                "dockerfileLines": docker_file_lines
+            }
+        else:
+            definition = {}
+        data = json.dumps({
+            "captainDefinitionContent": json.dumps(definition),
+            "gitHash": ""
+        })
         response = self.session.post(
             self._build_url(
                 CaproverAPI.APP_DATA_PATH
             ) + '/' + app_name,
             headers=self.headers, data=data
         )
-        self._check_errors(response)
+        self._check_errors(response.json())
         self._wait_until_app_ready(app_name=app_name, timeout=120)
-        time.sleep(1)
+        time.sleep(0.50)
         self._ensure_app_build_success(app_name=app_name)
+        return response.json()
 
     def _login(self):
         data = json.dumps({"password": self.password})
@@ -243,7 +295,7 @@ class CaproverAPI:
             self._build_url(CaproverAPI.LOGIN_PATH),
             headers=self.headers, data=data
         )
-        return CaproverAPI._check_errors(response)
+        return CaproverAPI._check_errors(response.json())
 
     def stop_app(self, app_name: str):
         return self.update_app(app_name=app_name, instance_count=0)
@@ -313,7 +365,7 @@ class CaproverAPI:
             self._build_url(CaproverAPI.APP_DELETE_PATH),
             headers=self.headers, data=data
         )
-        return CaproverAPI._check_errors(response)
+        return CaproverAPI._check_errors(response.json())
 
     def create_app(
         self, app_name: str, has_persistent_data: bool = False,
@@ -338,7 +390,7 @@ class CaproverAPI:
         )
         if wait_for_app_build:
             self._wait_until_app_ready(app_name=app_name)
-        return CaproverAPI._check_errors(response)
+        return CaproverAPI._check_errors(response.json())
 
     def add_domain(self, app_name: str, custom_domain: str):
         """
@@ -352,7 +404,7 @@ class CaproverAPI:
             self._build_url(CaproverAPI.ADD_CUSTOM_DOMAIN_PATH),
             headers=self.headers, data=data
         )
-        return CaproverAPI._check_errors(response)
+        return CaproverAPI._check_errors(response.json())
 
     def enable_ssl(self, app_name: str, custom_domain: str):
         """
@@ -368,7 +420,7 @@ class CaproverAPI:
             self._build_url(CaproverAPI.ENABLE_SSL_PATH),
             headers=self.headers, data=data
         )
-        return CaproverAPI._check_errors(response)
+        return CaproverAPI._check_errors(response.json())
 
     def update_app(
         self, app_name: str, instance_count: int = None,
@@ -468,17 +520,21 @@ class CaproverAPI:
             self._build_url(CaproverAPI.UPDATE_APP_PATH),
             headers=self.headers, data=json.dumps(current_app_info)
         )
-        return CaproverAPI._check_errors(response)
+        return CaproverAPI._check_errors(response.json())
 
     def create_and_update_app(
         self, app_name: str, has_persistent_data: bool,
-        custom_domain: str = None, enable_ssl: bool = False, **kwargs
+        custom_domain: str = None, enable_ssl: bool = False,
+        image_name: str = None, docker_file_lines: list = None,
+        **kwargs
     ):
         """
         :param app_name: app name
         :param has_persistent_data: set to true to use persistent dirs
         :param custom_domain: custom domain for app
         :param enable_ssl: set to true to enable ssl
+        :param image_name: docker hub image name
+        :param docker_file_lines: docker file lines
         :param kwargs: extra kwargs check
                 :func:`~caprover_api.CaproverAPI.update_app`
         :return:
@@ -499,6 +555,12 @@ class CaproverAPI:
         if kwargs:
             time.sleep(0.10)
             response = self.update_app(app_name=app_name, **kwargs)
+        if image_name or docker_file_lines:
+            response = self.deploy_app(
+                app_name=app_name,
+                image_name=image_name,
+                docker_file_lines=docker_file_lines
+            )
         return response
 
     def create_app_with_custom_domain(

@@ -89,3 +89,12 @@ create a new app::
     )
 
 
+create and deploy redis app from docker hub::
+
+    cap.create_and_update_app(
+        app_name="new-app-redis",
+        has_persistent_data=False,
+        image_name='redis:5',
+        volumes=['new-app-redis-data:/data', ]
+    )
+
