@@ -95,6 +95,6 @@ create and deploy redis app from docker hub::
         app_name="new-app-redis",
         has_persistent_data=False,
         image_name='redis:5',
-        volumes=['new-app-redis-data:/data', ]
+        persistent_directories=['new-app-redis-data:/data', ]
     )
 
