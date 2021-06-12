@@ -20,7 +20,7 @@ unofficial caprover api to deploy apps to caprover
 
 
 * Free software: MIT license
-* Documentation: https://caprover-api.readthedocs.io.
+* Full Documentation: https://caprover-api.readthedocs.io.
 
 
 Features
@@ -38,4 +38,54 @@ Features
 * stop app
 * scale app
 
-.. include:: docs/usage.rst
+
+Usage
+-----
+
+To use Caprover API in a project::
+
+    from caprover_api import caprover_api
+
+    cap = caprover_api.CaproverAPI(
+        dashboard_url="cap-dashboard-url",
+        password="cap-dashboard-password"
+    )
+
+
+One Click Apps
+^^^^^^^^^^^^^^^
+
+get app name from `List of one-click-apps <https://github.com/caprover/one-click-apps/tree/master/public/v4/apps>`_
+
+automated deploy::
+
+    app_variables = {
+        "$$cap_redis_password": "REDIS-PASSWORD-HERE"
+    }
+    cap.deploy_one_click_app(
+        one_click_app_name='redis',
+        namespace='new-app',
+        app_variables=app_variables,
+        automated=True
+    )
+
+
+manual deploy (you will be asked to enter required variables during runtime)::
+
+    cap.deploy_one_click_app(
+        one_click_app_name='redis',
+        namespace='new-app',
+    )
+
+
+Custom Apps
+^^^^^^^^^^^^
+
+create a new app::
+
+    cap.create_app(
+        app_name="new-app",
+        has_persistent_data=False
+    )
+
+
