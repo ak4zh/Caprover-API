@@ -6,6 +6,7 @@ import logging
 
 import requests
 import yaml
+
 try:
     from yaml import CLoader as Loader
 except ImportError:
@@ -430,7 +431,8 @@ class CaproverAPI:
         support_websocket: bool = None, port_mapping: list = None,
         persistent_directories: list = None, container_http_port: int = None,
         description: str = None, service_update_override: str = None,
-        pre_deploy_function: str = None, app_push_webhook: dict = None
+        pre_deploy_function: str = None, app_push_webhook: dict = None,
+        repo_info: dict = None
     ):
         """
         :param app_name: name of the app you want to update
@@ -447,9 +449,15 @@ class CaproverAPI:
         :param service_update_override: service override
         :param pre_deploy_function:
         :param app_push_webhook:
+        :param repo_info: dict with repo info
+            fields repo, user, password, sshKey, branch
         :return: dict
         """
         current_app_info = self.get_app(app_name=app_name)
+        if not current_app_info.get("appPushWebhook"):
+            current_app_info["appPushWebhook"] = {}
+        if repo_info and isinstance(repo_info, dict):
+            current_app_info["appPushWebhook"]["repoInfo"] = repo_info
 
         # handle environment_variables
         # gets current envVars and overwrite with new data
@@ -526,7 +534,7 @@ class CaproverAPI:
         self, app_name: str, has_persistent_data: bool,
         custom_domain: str = None, enable_ssl: bool = False,
         image_name: str = None, docker_file_lines: list = None,
-        **kwargs
+        instance_count: int = 1, **kwargs
     ):
         """
         :param app_name: app name
@@ -535,6 +543,7 @@ class CaproverAPI:
         :param enable_ssl: set to true to enable ssl
         :param image_name: docker hub image name
         :param docker_file_lines: docker file lines
+        :param instance_count: int number of instances to run
         :param kwargs: extra kwargs check
                 :func:`~caprover_api.CaproverAPI.update_app`
         :return:
@@ -554,7 +563,11 @@ class CaproverAPI:
             )
         if kwargs:
             time.sleep(0.10)
-            response = self.update_app(app_name=app_name, **kwargs)
+            response = self.update_app(
+                app_name=app_name,
+                instance_count=instance_count,
+                **kwargs
+            )
         if image_name or docker_file_lines:
             response = self.deploy_app(
                 app_name=app_name,
