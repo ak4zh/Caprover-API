@@ -185,12 +185,16 @@ class CaproverAPI:
         )
         return CaproverAPI._check_errors(response.json())
 
-    @retry(times=60, exceptions=COMMON_ERRORS)
+    @retry(times=3, exceptions=COMMON_ERRORS)
     def _wait_until_app_ready(self, app_name):
-        app_info = self.get_app_info(app_name)
-        if not app_info.get("data", {}).get("isAppBuilding"):
-            logging.info("App building finished...")
-            return app_info
+        timeout = 60
+        while timeout:
+            timeout -= 1
+            time.sleep(1)
+            app_info = self.get_app_info(app_name)
+            if not app_info.get("data", {}).get("isAppBuilding"):
+                logging.info("App building finished...")
+                return app_info
         raise Exception("App building timeout reached")
 
     def _ensure_app_build_success(self, app_name: str):
