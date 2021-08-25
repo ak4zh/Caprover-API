@@ -187,3 +187,14 @@ scale app to 3 instances::
 
     cap.update_app(app_name="new-app", instance_count=3)
 
+
+Backup
+^^^^^^
+
+Create a backup of CapRover configs in order to be able to spin up a clone of this server.
+Note that your application data (volumes, and images) are not part of this backup. This backup only includes the server configuration details, such as root domains, app names, SSL certs and etc.::
+
+    cap.create_backup()
+
+You can pass an optional file_name, the default file name is `{captain_namespace}-bck-%Y-%m-%d %H:%M:%S.rar`
+

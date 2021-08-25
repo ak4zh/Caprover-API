@@ -1,4 +1,6 @@
+import datetime
 import json
+import os
 import re
 import time
 import secrets
@@ -71,13 +73,16 @@ class CaproverAPI:
     UPDATE_APP_PATH = '/api/v2/user/apps/appDefinitions/update'
     ENABLE_SSL_PATH = '/api/v2/user/apps/appDefinitions/enablecustomdomainssl'
     APP_DATA_PATH = '/api/v2/user/apps/appData'
+    CREATE_BACKUP_PATH = '/api/v2/user/system/createbackup'
+    DOWNLOAD_BACKUP_PATH = '/api/v2/downloads/'
 
     PUBLIC_APP_PATH = "https://raw.githubusercontent.com/" \
                       "caprover/one-click-apps/master/public/v4/apps/"
 
     def __init__(
         self, dashboard_url: str, password: str,
-        protocol: str = 'https://', schema_version: int = 2
+        protocol: str = 'https://', schema_version: int = 2,
+        captain_namespace='captain'
     ):
         """
         :param dashboard_url: captain dashboard url
@@ -87,11 +92,12 @@ class CaproverAPI:
         self.session = requests.Session()
         self.headers = {
             'accept': 'application/json, text/plain, */*',
-            'x-namespace': 'captain',
+            'x-namespace': captain_namespace,
             'content-type': 'application/json;charset=UTF-8',
         }
         self.dashboard_url = dashboard_url.split("/#")[0].strip("/")
         self.password = password
+        self.captain_namespace = captain_namespace
         self.schema_version = schema_version
         self.base_url = self.dashboard_url if re.search(
             r"^https?://", self.dashboard_url
@@ -669,3 +675,33 @@ class CaproverAPI:
             custom_domain=custom_domain,
             enable_ssl=True
         )
+
+    def _create_backup(self, file_name):
+        data = json.dumps({"postDownloadFileName": file_name})
+        response = self.session.post(
+            self._build_url(CaproverAPI.CREATE_BACKUP_PATH),
+            headers=self.headers, data=data
+        )
+        return CaproverAPI._check_errors(response.json())
+
+    def _download_backup(self, download_token, file_name):
+        response = self.session.get(
+            self._build_url(CaproverAPI.DOWNLOAD_BACKUP_PATH),
+            headers=self.headers,
+            params={
+                'namespace': self.captain_namespace,
+                'downloadToken': download_token
+            }
+        )
+        assert response.status_code == 200
+        with open(file_name, 'wb') as f:
+            f.write(response.content)
+            return os.path.abspath(f.name)
+
+    def create_backup(self, file_name=None):
+        if not file_name:
+            file_name = f'{self.captain_namespace}-bck-{datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}.rar'
+
+        valid_response = self._create_backup(file_name=file_name)
+        download_token = valid_response.get('data', {}).get('downloadToken')
+        return self._download_backup(download_token=download_token, file_name=file_name)
