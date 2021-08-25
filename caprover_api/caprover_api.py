@@ -555,9 +555,8 @@ class CaproverAPI:
         if port_mapping:
             ports = [
                 {
-                    "hostPort": host_port, "containerPort": container_port
-                } for port in port_mapping
-                for host_port, container_port in port.split(":")
+                    "hostPort": ports.split(':')[0], "containerPort": ports.split(':')[1]
+                } for ports in port_mapping
             ]
         else:
             ports = None
