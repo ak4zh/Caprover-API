@@ -712,8 +712,11 @@ class CaproverAPI:
         )
 
     def trigger_build(self, app_name: str, captain_namespace: str = 'captain'):
+        app = self.get_app(app_name=app_name)
+        push_web_token = app.get('appPushWebhook', {}).get('pushWebhookToken')
         params = (
             ('namespace', captain_namespace),
+            ('token', push_web_token)
         )
         data = '{}'
         logging.info("Triggering build process: {}".format(app_name))
