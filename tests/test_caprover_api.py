@@ -5,8 +5,6 @@
 
 import unittest
 
-from caprover_api import caprover_api
-
 
 class TestCaprover_api(unittest.TestCase):
     """Tests for `caprover_api` package."""

@@ -75,6 +75,7 @@ class CaproverAPI:
     APP_DATA_PATH = '/api/v2/user/apps/appData'
     CREATE_BACKUP_PATH = '/api/v2/user/system/createbackup'
     DOWNLOAD_BACKUP_PATH = '/api/v2/downloads/'
+    TRIGGER_BUILD_PATH = 'api/v2/user/apps/webhooks/triggerbuild'
 
     PUBLIC_APP_PATH = "https://raw.githubusercontent.com/" \
                       "caprover/one-click-apps/master/public/v4/apps/"
@@ -561,7 +562,8 @@ class CaproverAPI:
         if port_mapping:
             ports = [
                 {
-                    "hostPort": ports.split(':')[0], "containerPort": ports.split(':')[1]
+                    "hostPort": ports.split(':')[0],
+                    "containerPort": ports.split(':')[1]
                 } for ports in port_mapping
             ]
         else:
@@ -700,8 +702,23 @@ class CaproverAPI:
 
     def create_backup(self, file_name=None):
         if not file_name:
-            file_name = f'{self.captain_namespace}-bck-{datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}.rar'
+            date_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            file_name = f'{self.captain_namespace}-bck-{date_str}.rar'
 
         valid_response = self._create_backup(file_name=file_name)
         download_token = valid_response.get('data', {}).get('downloadToken')
-        return self._download_backup(download_token=download_token, file_name=file_name)
+        return self._download_backup(
+            download_token=download_token, file_name=file_name
+        )
+
+    def trigger_build(self, app_name: str, captain_namespace: str = 'captain'):
+        params = (
+            ('namespace', captain_namespace),
+        )
+        data = '{}'
+        logging.info("Triggering build process: {}".format(app_name))
+        response = self.session.post(
+            self._build_url(CaproverAPI.TRIGGER_BUILD_PATH),
+            headers=self.headers, params=params, data=data
+        )
+        return CaproverAPI._check_errors(response.json())
