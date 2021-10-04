@@ -75,7 +75,7 @@ class CaproverAPI:
     APP_DATA_PATH = '/api/v2/user/apps/appData'
     CREATE_BACKUP_PATH = '/api/v2/user/system/createbackup'
     DOWNLOAD_BACKUP_PATH = '/api/v2/downloads/'
-    TRIGGER_BUILD_PATH = 'api/v2/user/apps/webhooks/triggerbuild'
+    TRIGGER_BUILD_PATH = '/api/v2/user/apps/webhooks/triggerbuild'
 
     PUBLIC_APP_PATH = "https://raw.githubusercontent.com/" \
                       "caprover/one-click-apps/master/public/v4/apps/"
