@@ -497,7 +497,7 @@ class CaproverAPI:
         persistent_directories: list = None, container_http_port: int = None,
         description: str = None, service_update_override: str = None,
         pre_deploy_function: str = None, app_push_webhook: dict = None,
-        repo_info: dict = None
+        repo_info: dict = None, **kwargs
     ):
         """
         :param app_name: name of the app you want to update
@@ -588,6 +588,7 @@ class CaproverAPI:
                 continue
             # update current value with new value
             current_app_info[k] = v
+        kwargs.update(current_app_info)
         logging.info("{} | Updating app info...".format(app_name))
         response = self.session.post(
             self._build_url(CaproverAPI.UPDATE_APP_PATH),
