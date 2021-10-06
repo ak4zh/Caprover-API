@@ -592,7 +592,7 @@ class CaproverAPI:
         logging.info("{} | Updating app info...".format(app_name))
         response = self.session.post(
             self._build_url(CaproverAPI.UPDATE_APP_PATH),
-            headers=self.headers, data=json.dumps(current_app_info)
+            headers=self.headers, data=json.dumps(kwargs)
         )
         return CaproverAPI._check_errors(response.json())
 
