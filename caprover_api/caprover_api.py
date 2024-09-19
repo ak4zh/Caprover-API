@@ -631,7 +631,7 @@ class CaproverAPI:
             app_name=app_name, has_persistent_data=has_persistent_data
         )
         if enable_ssl:
-            time.sleep(0.10)
+            time.sleep(2.10)
             response = self.enable_ssl(
                 app_name=app_name
             )
@@ -641,7 +641,7 @@ class CaproverAPI:
                 app_name=app_name, custom_domain=custom_domain
             )
             if enable_ssl:
-                time.sleep(0.10)
+                time.sleep(2.10)
                 response = self.enable_ssl(
                     app_name=app_name, custom_domain=custom_domain
                 )
