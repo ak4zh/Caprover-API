@@ -41,6 +41,9 @@ def retry(times: int, exceptions: tuple = Exception):
     return decorator
 
 
+PUBLIC_ONE_CLICK_APP_PATH = "https://raw.githubusercontent.com/" \
+                                "caprover/one-click-apps/master/public/v4/apps/"
+
 class CaproverAPI:
     class Status:
         STATUS_ERROR_GENERIC = 1000
@@ -76,9 +79,6 @@ class CaproverAPI:
     CREATE_BACKUP_PATH = '/api/v2/user/system/createbackup'
     DOWNLOAD_BACKUP_PATH = '/api/v2/downloads/'
     TRIGGER_BUILD_PATH = '/api/v2/user/apps/webhooks/triggerbuild'
-
-    PUBLIC_APP_PATH = "https://raw.githubusercontent.com/" \
-                      "caprover/one-click-apps/master/public/v4/apps/"
 
     def __init__(
         self, dashboard_url: str, password: str,
@@ -123,22 +123,32 @@ class CaproverAPI:
         logging.info(description)
         return response
 
+    @staticmethod
+    def _download_one_click_app_defn(repository_path: str, one_click_app_name: str):
+        """Retrieve the raw app definition from the public one-click app repository.
+
+        :return raw_app_definition (str) containing YAML
+        """
+        raw_app_definition = requests.get(
+            repository_path + one_click_app_name + ".yml"
+        ).text
+        return raw_app_definition
+
     def _resolve_app_variables(
-        self, one_click_app_name, cap_app_name,
+        self, raw_app_definition, cap_app_name,
         app_variables, automated: bool = False
     ):
         """
         Resolve the app variables for a CapRover one-click app.
 
-        The function retrieves the raw app definition from the public one-click app repository
-        and injects the `app_variables` into the app definiition, including resolving
-        default values and random hex generator expressions.
+        The function injects the `app_variables` into the app definiition,
+        including resolving default values and random hex generator expressions.
 
         If required variables are missing or have an invalid value, the function will
         either raise an exception (if `automated` is True) or prompt the user to enter a
         valid value.
 
-        :param one_click_app_name (str): The name of the app in the one-click repository.
+        :param raw_app_definition (str): The unparsed YAML text of the one-click app definition.
         :param cap_app_name (str): The name under which the app will be installed.
         :param app_variables (dict): A dictionary of $$cap_variables and their values.
                 This will get updated to also include the $$cap_appname and $$cap_root domain.
@@ -147,9 +157,7 @@ class CaproverAPI:
 
         :return The updated raw app definiton with all variables resolved.
         """
-        raw_app_data = requests.get(
-            CaproverAPI.PUBLIC_APP_PATH + one_click_app_name + ".yml"
-        ).text
+        raw_app_data = raw_app_definition
         app_variables.update(
             {
                 "$$cap_appname": cap_app_name,
@@ -247,7 +255,8 @@ class CaproverAPI:
 
     def deploy_one_click_app(
         self, one_click_app_name: str, namespace: str,
-        app_variables: dict = None, automated: bool = False
+        app_variables: dict = None, automated: bool = False,
+        one_click_repository: str = PUBLIC_ONE_CLICK_APP_PATH
     ):
         """
         Deploys a one-click app on the CapRover platform.
@@ -258,12 +267,16 @@ class CaproverAPI:
         :param app_variables: dict containing required app variables
         :param automated: set to true
             if you have supplied all required variables
+        :param one_click_repository: where to download the one-click app from
         :return dict containing the deployment "status" and "description".
         """
         app_variables = app_variables or {}
         cap_app_name = "{}-{}".format(namespace, one_click_app_name)
+        raw_app_definition = self._download_one_click_app_defn(
+            one_click_repository, one_click_app_name
+        )
         resolved_app_data = self._resolve_app_variables(
-            one_click_app_name=one_click_app_name,
+            raw_app_definition=raw_app_definition,
             cap_app_name=cap_app_name,
             app_variables=app_variables,
             automated=automated
