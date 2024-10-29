@@ -127,6 +127,26 @@ class CaproverAPI:
         self, one_click_app_name, cap_app_name,
         app_variables, automated: bool = False
     ):
+        """
+        Resolve the app variables for a CapRover one-click app.
+
+        The function retrieves the raw app definition from the public one-click app repository
+        and injects the `app_variables` into the app definiition, including resolving
+        default values and random hex generator expressions.
+
+        If required variables are missing or have an invalid value, the function will
+        either raise an exception (if `automated` is True) or prompt the user to enter a
+        valid value.
+
+        :param one_click_app_name (str): The name of the app in the one-click repository.
+        :param cap_app_name (str): The name under which the app will be installed.
+        :param app_variables (dict): A dictionary of $$cap_variables and their values.
+                This will get updated to also include the $$cap_appname and $$cap_root domain.
+        :param automated (bool, optional): Whether the function is being called in an
+                automated context. Defaults to False.
+
+        :return The updated raw app definiton with all variables resolved.
+        """
         raw_app_data = requests.get(
             CaproverAPI.PUBLIC_APP_PATH + one_click_app_name + ".yml"
         ).text
@@ -230,13 +250,15 @@ class CaproverAPI:
         app_variables: dict = None, automated: bool = False
     ):
         """
+        Deploys a one-click app on the CapRover platform.
+
         :param one_click_app_name: one click app name
         :param namespace: a namespace to use for all services
             inside the one-click app
         :param app_variables: dict containing required app variables
         :param automated: set to true
             if you have supplied all required variables
-        :return:
+        :return dict containing the deployment "status" and "description".
         """
         app_variables = app_variables or {}
         cap_app_name = "{}-{}".format(namespace, one_click_app_name)
