@@ -163,6 +163,16 @@ class TestUpdateApp(unittest.TestCase):
         ]
         self.assertEqual(post_data["volumes"], expected_volumes)
 
+    def test_add_http_auth(self):
+        self.api.update_app(
+            "test_app", http_auth={"user": "admin", "password": "example"}
+        )
+        post_data = json.loads(self.api.session.post.call_args[1]["data"])
+
+        self.assertEqual(
+            post_data["httpAuth"], {"user": "admin", "password": "example"}
+        )
+
     def test_update_with_persistent_directories_host_path(self):
         """
         Test update_app with persistent_directories using hostPath format.
