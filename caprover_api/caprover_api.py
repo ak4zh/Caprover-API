@@ -74,7 +74,8 @@ class CaproverAPI:
     APP_DELETE_PATH = '/api/v2/user/apps/appDefinitions/delete'
     ADD_CUSTOM_DOMAIN_PATH = '/api/v2/user/apps/appDefinitions/customdomain'
     UPDATE_APP_PATH = '/api/v2/user/apps/appDefinitions/update'
-    ENABLE_SSL_PATH = '/api/v2/user/apps/appDefinitions/enablecustomdomainssl'
+    ENABLE_BASE_DOMAIN_SSL_PATH = '/api/v2/user/apps/appDefinitions/enablebasedomainssl'
+    ENABLE_CUSTOM_DOMAIN_SSL_PATH = '/api/v2/user/apps/appDefinitions/enablecustomdomainssl'
     APP_DATA_PATH = '/api/v2/user/apps/appData'
     CREATE_BACKUP_PATH = '/api/v2/user/system/createbackup'
     DOWNLOAD_BACKUP_PATH = '/api/v2/downloads/'
@@ -494,7 +495,8 @@ class CaproverAPI:
     def add_domain(self, app_name: str, custom_domain: str):
         """
         :param app_name:
-        :param custom_domain:
+        :param custom_domain: custom domain to add
+            It must already point to this IP in DNS
         :return:
         """
         data = json.dumps({"appName": app_name, "customDomain": custom_domain})
@@ -506,18 +508,28 @@ class CaproverAPI:
         return CaproverAPI._check_errors(response.json())
 
     @retry(times=3, exceptions=COMMON_ERRORS)
-    def enable_ssl(self, app_name: str, custom_domain: str):
-        """
+    def enable_ssl(self, app_name: str, custom_domain: str = None):
+        """Enable SSL on a domain.
+
         :param app_name: app name
-        :param custom_domain: custom domain to add
+        :param custom_domain: if set, SSL is enabled on this custom domain.
+            Otherwise, SSL is enabled on the base domain.
         :return:
         """
-        logging.info(
-            "{} | Enabling SSL for domain {}".format(app_name, custom_domain)
-        )
-        data = json.dumps({"appName": app_name, "customDomain": custom_domain})
+        if custom_domain:
+            logging.info(
+                "{} | Enabling SSL for domain {}".format(app_name, custom_domain)
+            )
+            path = CaproverAPI.ENABLE_CUSTOM_DOMAIN_SSL_PATH
+            data = json.dumps({"appName": app_name, "customDomain": custom_domain})
+        else:
+            logging.info(
+                "{} | Enabling SSL for root domain".format(app_name)
+            )
+            path = CaproverAPI.ENABLE_BASE_DOMAIN_SSL_PATH
+            data = json.dumps({"appName": app_name})
         response = self.session.post(
-            self._build_url(CaproverAPI.ENABLE_SSL_PATH),
+            self._build_url(path),
             headers=self.headers, data=data
         )
         return CaproverAPI._check_errors(response.json())
