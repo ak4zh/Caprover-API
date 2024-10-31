@@ -97,7 +97,7 @@ caproverOneClickApp:
         )
         parsed = yaml.safe_load(result)
         self.assertRegex(
-            parsed["services"]["testapp"]["environment"]["VRD"],
+            str(parsed["services"]["testapp"]["environment"]["VRD"]),
             r"^[0-9a-f]{6}$",
         )
 
