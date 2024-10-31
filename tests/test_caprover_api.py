@@ -96,8 +96,6 @@ caproverOneClickApp:
             self.raw_yaml, "testapp", {}, automated=True
         )
         parsed = yaml.safe_load(result)
-        # FIXME: The template requested 6 characters long,
-        # but it ends up being the hex equivalent of 6 bytes (= 12 ascii characters)
         self.assertRegex(
             parsed["services"]["testapp"]["environment"]["VRD"],
             r"^[0-9a-f]{6}$",
