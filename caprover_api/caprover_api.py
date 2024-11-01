@@ -620,7 +620,7 @@ class CaproverAPI:
             "instanceCount": instance_count,
             "preDeployFunction": pre_deploy_function,
             "captainDefinitionRelativeFilePath": captain_definition_path,
-            "notExposeAsWebApp": not expose_as_web_app,
+            "notExposeAsWebApp": None if expose_as_web_app is None else (not expose_as_web_app),
             "forceSsl": force_ssl,
             "websocketSupport": support_websocket,
             "ports": ports,
