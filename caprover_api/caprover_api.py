@@ -159,6 +159,16 @@ class CaproverAPI:
         :return The updated raw app definiton with all variables resolved.
         """
         raw_app_data = raw_app_definition
+        # Replace any random hex generators in the raw data first
+        for match in re.finditer(r"\$\$cap_gen_random_hex\((\d+)\)", raw_app_data):
+            requested_length = int(match.group(1))
+            raw_app_data = raw_app_data.replace(
+                match.group(0),
+                # slice notation is because secrets.token_hex generates the hex
+                # representation of n bytes, which is twice as many hex chars.
+                secrets.token_hex(requested_length)[:requested_length]
+            )
+
         app_variables.update(
             {
                 "$$cap_appname": cap_app_name,
@@ -173,13 +183,6 @@ class CaproverAPI:
         for app_variable in variables:
             if app_variables.get(app_variable['id']) is None:
                 default_value = app_variable.get('defaultValue', '')
-                is_random_hex = re.search(
-                    r"\$\$cap_gen_random_hex\((\d+)\)", default_value or ""
-                )
-                if is_random_hex:
-                    default_value = secrets.token_hex(
-                        int(is_random_hex.group(1))
-                    )
                 is_valid = re.search(
                     app_variable.get('validRegex', '.*').strip('/'),
                     default_value
