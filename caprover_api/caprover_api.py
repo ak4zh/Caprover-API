@@ -553,12 +553,19 @@ class CaproverAPI:
         :param app_name: name of the app you want to update
         :param instance_count: instances count, set 0 to stop the app
         :param captain_definition_path: captain-definition file relative path
-        :param environment_variables: dicts env variables
+        :param environment_variables: dict of env variables
+            will be merged with the current set:
+            There is no way to DELETE an env variable from this API.
         :param expose_as_web_app: set true to expose the app as web app
         :param force_ssl: force traffic to use ssl
         :param support_websocket: set to true to enable webhook support
         :param port_mapping: list of port mapping
-        :param persistent_directories: list
+        :param persistent_directories: list of dict
+            fields hostPath OR volumeName, containerPath
+            If a list is passed, it replaces the entire set of persistent
+              directories on the app.
+            Set to None (default) to leave as-is, or empty list to clear
+              existing mounts.
         :param container_http_port: port to use for your container app
         :param description: app description
         :param service_update_override: service override
@@ -590,24 +597,25 @@ class CaproverAPI:
         current_app_info['envVars'] = updated_environment_variables
 
         # handle volumes
-        # gets current volumes and overwrite with new data
-        current_volumes = current_app_info['volumes']
-        current_volumes_as_dict = {
-            item['volumeName']: item['containerPath'] for
-            item in current_volumes
-        }
-        if persistent_directories:
+        if persistent_directories is not None:
+            updated_volumes = []
             for volume_pair in persistent_directories:
                 volume_name, container_path = volume_pair.split(':')
-                current_volumes_as_dict[volume_name] = container_path
-        updated_volumes = [
-            {
-                "volumeName": volume_name,
-                "containerPath": container_path
-            } for
-            volume_name, container_path in current_volumes_as_dict.items()
-        ]
-        current_app_info['volumes'] = updated_volumes
+                if volume_name.startswith("/"):
+                    updated_volumes.append(
+                        {
+                            "hostPath": volume_name,
+                            "containerPath": container_path,
+                        }
+                    )
+                else:
+                    updated_volumes.append(
+                        {
+                            "volumeName": volume_name,
+                            "containerPath": container_path,
+                        }
+                    )
+            persistent_directories = updated_volumes
 
         if port_mapping:
             ports = [
@@ -627,6 +635,7 @@ class CaproverAPI:
             "forceSsl": force_ssl,
             "websocketSupport": support_websocket,
             "ports": ports,
+            "volumes": persistent_directories,
             "containerHttpPort": container_http_port,
             "description": description,
             "appPushWebhook": app_push_webhook,
