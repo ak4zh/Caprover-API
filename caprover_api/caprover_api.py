@@ -74,7 +74,8 @@ class CaproverAPI:
     APP_DELETE_PATH = '/api/v2/user/apps/appDefinitions/delete'
     ADD_CUSTOM_DOMAIN_PATH = '/api/v2/user/apps/appDefinitions/customdomain'
     UPDATE_APP_PATH = '/api/v2/user/apps/appDefinitions/update'
-    ENABLE_SSL_PATH = '/api/v2/user/apps/appDefinitions/enablecustomdomainssl'
+    ENABLE_BASE_DOMAIN_SSL_PATH = '/api/v2/user/apps/appDefinitions/enablebasedomainssl'
+    ENABLE_CUSTOM_DOMAIN_SSL_PATH = '/api/v2/user/apps/appDefinitions/enablecustomdomainssl'
     APP_DATA_PATH = '/api/v2/user/apps/appData'
     CREATE_BACKUP_PATH = '/api/v2/user/system/createbackup'
     DOWNLOAD_BACKUP_PATH = '/api/v2/downloads/'
@@ -158,6 +159,16 @@ class CaproverAPI:
         :return The updated raw app definiton with all variables resolved.
         """
         raw_app_data = raw_app_definition
+        # Replace any random hex generators in the raw data first
+        for match in re.finditer(r"\$\$cap_gen_random_hex\((\d+)\)", raw_app_data):
+            requested_length = int(match.group(1))
+            raw_app_data = raw_app_data.replace(
+                match.group(0),
+                # slice notation is because secrets.token_hex generates the hex
+                # representation of n bytes, which is twice as many hex chars.
+                secrets.token_hex(requested_length)[:requested_length]
+            )
+
         app_variables.update(
             {
                 "$$cap_appname": cap_app_name,
@@ -172,13 +183,6 @@ class CaproverAPI:
         for app_variable in variables:
             if app_variables.get(app_variable['id']) is None:
                 default_value = app_variable.get('defaultValue', '')
-                is_random_hex = re.search(
-                    r"\$\$cap_gen_random_hex\((\d+)\)", default_value or ""
-                )
-                if is_random_hex:
-                    default_value = secrets.token_hex(
-                        int(is_random_hex.group(1))
-                    )
                 is_valid = re.search(
                     app_variable.get('validRegex', '.*').strip('/'),
                     default_value
@@ -494,7 +498,8 @@ class CaproverAPI:
     def add_domain(self, app_name: str, custom_domain: str):
         """
         :param app_name:
-        :param custom_domain:
+        :param custom_domain: custom domain to add
+            It must already point to this IP in DNS
         :return:
         """
         data = json.dumps({"appName": app_name, "customDomain": custom_domain})
@@ -506,18 +511,28 @@ class CaproverAPI:
         return CaproverAPI._check_errors(response.json())
 
     @retry(times=3, exceptions=COMMON_ERRORS)
-    def enable_ssl(self, app_name: str, custom_domain: str):
-        """
+    def enable_ssl(self, app_name: str, custom_domain: str = None):
+        """Enable SSL on a domain.
+
         :param app_name: app name
-        :param custom_domain: custom domain to add
+        :param custom_domain: if set, SSL is enabled on this custom domain.
+            Otherwise, SSL is enabled on the base domain.
         :return:
         """
-        logging.info(
-            "{} | Enabling SSL for domain {}".format(app_name, custom_domain)
-        )
-        data = json.dumps({"appName": app_name, "customDomain": custom_domain})
+        if custom_domain:
+            logging.info(
+                "{} | Enabling SSL for domain {}".format(app_name, custom_domain)
+            )
+            path = CaproverAPI.ENABLE_CUSTOM_DOMAIN_SSL_PATH
+            data = json.dumps({"appName": app_name, "customDomain": custom_domain})
+        else:
+            logging.info(
+                "{} | Enabling SSL for root domain".format(app_name)
+            )
+            path = CaproverAPI.ENABLE_BASE_DOMAIN_SSL_PATH
+            data = json.dumps({"appName": app_name})
         response = self.session.post(
-            self._build_url(CaproverAPI.ENABLE_SSL_PATH),
+            self._build_url(path),
             headers=self.headers, data=data
         )
         return CaproverAPI._check_errors(response.json())
@@ -616,7 +631,7 @@ class CaproverAPI:
             "instanceCount": instance_count,
             "preDeployFunction": pre_deploy_function,
             "captainDefinitionRelativeFilePath": captain_definition_path,
-            "notExposeAsWebApp": not expose_as_web_app,
+            "notExposeAsWebApp": None if expose_as_web_app is None else (not expose_as_web_app),
             "forceSsl": force_ssl,
             "websocketSupport": support_websocket,
             "ports": ports,
