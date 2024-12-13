@@ -102,9 +102,10 @@ caproverOneClickApp:
 
 
 class TestServiceUpdateOverride(unittest.TestCase):
-    """Tests for unsupported docker compose parameters to CapRover service override definition.
+    """Test unsupported docker-compose params as service override definition
 
-    Reference implementation: https://github.com/caprover/caprover-frontend/blob/master/src/utils/DockerComposeToServiceOverride.ts
+    Reference implementation:
+    https://github.com/caprover/caprover-frontend/blob/master/src/utils/DockerComposeToServiceOverride.ts
     """
 
     def setUp(self):

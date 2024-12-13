@@ -221,7 +221,7 @@ class CaproverAPI:
 
         :param command: The command from the Docker Compose service definition
             a string or a list of str
-        :return: A dictionary that can be converted to YAML for the service override.
+        :return: A dict that can be converted to YAML for the service override.
         """
 
         def parse_docker_cmd(cmd_string):
@@ -344,7 +344,7 @@ class CaproverAPI:
                     caprover_extras.get("containerHttpPort", 80)
                 )
 
-                # Parse command into CapRover service update override if it exists
+                # Parse command (if it exists) into service update override
                 command = service_data.get("command")
                 service_update_override = None
                 if command:
