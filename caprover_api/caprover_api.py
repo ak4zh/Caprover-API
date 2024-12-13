@@ -659,11 +659,14 @@ class CaproverAPI:
                 continue
             # update current value with new value
             current_app_info[k] = v
-        kwargs.update(current_app_info)
+
+        # Any other kwarg is an automatic override.
+        current_app_info.update(kwargs)
+
         logging.info("{} | Updating app info...".format(app_name))
         response = self.session.post(
             self._build_url(CaproverAPI.UPDATE_APP_PATH),
-            headers=self.headers, data=json.dumps(kwargs)
+            headers=self.headers, data=json.dumps(current_app_info)
         )
         return CaproverAPI._check_errors(response.json())
 

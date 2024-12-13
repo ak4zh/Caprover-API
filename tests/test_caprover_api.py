@@ -123,6 +123,7 @@ class TestUpdateApp(unittest.TestCase):
         self.api.get_app = MagicMock(
             return_value={
                 "appName": "test_app",
+                "redirectDomain": "",
                 "envVars": [{"key": "EXISTING_ENV_VAR", "value": "old_value"}],
                 "volumes": [
                     {
@@ -217,3 +218,11 @@ class TestUpdateApp(unittest.TestCase):
             {"containerPort": "443", "hostPort": "443"},
         ]
         self.assertEqual(post_data["ports"], expected)
+
+    def test_update_via_unspecified_kwarg(self):
+        """You can use kwargs to override any other not explicitly listed as a method arg."""
+        new_redirect_domain = "test_app.example.com"
+        self.api.update_app("test_app", redirectDomain=new_redirect_domain)
+        post_data = json.loads(self.api.session.post.call_args[1]["data"])
+
+        self.assertEqual(post_data["redirectDomain"], new_redirect_domain)
