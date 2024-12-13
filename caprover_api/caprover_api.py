@@ -258,9 +258,12 @@ class CaproverAPI:
         return {}
 
     def deploy_one_click_app(
-        self, one_click_app_name: str, app_name: str = None,
-        app_variables: dict = None, automated: bool = False,
-        one_click_repository: str = PUBLIC_ONE_CLICK_APP_PATH
+        self,
+        one_click_app_name: str,
+        app_name: str = None,
+        app_variables: dict = None,
+        automated: bool = False,
+        one_click_repository: str = PUBLIC_ONE_CLICK_APP_PATH,
     ):
         """
         Deploys a one-click app on the CapRover platform.
@@ -303,6 +306,8 @@ class CaproverAPI:
                         )
                     )
                     continue
+
+                tags = [{"tagName": app_name}]
                 has_persistent_data = bool(service_data.get("volumes"))
                 persistent_directories = service_data.get("volumes", [])
                 environment_variables = service_data.get("environment", {})
@@ -326,7 +331,8 @@ class CaproverAPI:
                     persistent_directories=persistent_directories,
                     environment_variables=environment_variables,
                     expose_as_web_app=expose_as_web_app,
-                    container_http_port=container_http_port
+                    container_http_port=container_http_port,
+                    tags=tags,
                 )
                 image_name = service_data.get("image")
                 docker_file_lines = caprover_extras.get("dockerfileLines")
