@@ -101,6 +101,85 @@ caproverOneClickApp:
         )
 
 
+class TestServiceUpdateOverride(unittest.TestCase):
+    """Test unsupported docker-compose params as service override definition
+
+    Reference implementation:
+    https://github.com/caprover/caprover-frontend/blob/master/src/utils/DockerComposeToServiceOverride.ts
+    """
+
+    def setUp(self):
+        """Set up test fixtures"""
+        with patch.object(CaproverAPI, "get_system_info"), patch.object(
+            CaproverAPI, "_login"
+        ):
+            self.api = CaproverAPI(
+                dashboard_url="http://dummy", password="dummy"
+            )
+
+    def test_parse_command_single_string(self):
+        """
+        Test that a single string command is parsed into a list.
+        """
+        command = "redis-server --port 6380 --maxmemory 200mb"
+        expected_output = {
+            "TaskTemplate": {
+                "ContainerSpec": {
+                    "Command": [
+                        "redis-server",
+                        "--port",
+                        "6380",  # keep numbers as str
+                        "--maxmemory",
+                        "200mb",
+                    ]
+                }
+            }
+        }
+        result = self.api._parse_command(command)
+        self.assertEqual(result, expected_output)
+
+    def test_parse_command_list(self):
+        command = ["sh", "-c", "redis-server --port 6380"]
+        expected_output = {
+            "TaskTemplate": {
+                "ContainerSpec": {
+                    "Command": [
+                        "sh",
+                        "-c",
+                        "redis-server --port 6380",
+                    ]
+                }
+            }
+        }
+        result = self.api._parse_command(command)
+        self.assertEqual(result, expected_output)
+
+    def test_parse_command_multiline_string(self):
+        """
+        Test a multi-line string command (e.g. from YAML >| operator)
+        """
+        command = """sh -c "
+            echo 'Starting...'
+            redis-server
+            " """
+        expected_output = {
+            "TaskTemplate": {
+                "ContainerSpec": {
+                    "Command": [
+                        "sh",
+                        "-c",
+                        """
+            echo 'Starting...'
+            redis-server
+            """,
+                    ]
+                }
+            }
+        }
+        result = self.api._parse_command(command)
+        self.assertEqual(result, expected_output)
+
+
 class TestUpdateApp(unittest.TestCase):
     def setUp(self):
         with patch.object(CaproverAPI, "get_system_info"), patch.object(

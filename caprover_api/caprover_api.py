@@ -208,6 +208,38 @@ class CaproverAPI:
             )
         return raw_app_data
 
+    @staticmethod
+    def _parse_command(command):
+        """
+        Parse Docker Compose service command into a Docker override.
+
+        The override is compatible with Docker API's Service Update Object
+        and therefore is a valid Caprover Service Update Override.
+
+        Mimics caprover-frontend's functionality from:
+        https://github.com/caprover/caprover-frontend/blob/ffb2b69c1143262a241cd8005dddf263eece6bb1/src/utils/DockerComposeToServiceOverride.ts#L37
+
+        :param command: The command from the Docker Compose service definition
+            a string or a list of str
+        :return: A dict that can be converted to YAML for the service override.
+        """
+
+        def parse_docker_cmd(cmd_string):
+            # Matches sequences inside quotes or sequences without spaces
+            regex = r'[^\s"\'\n]+|"([^"]*)"|\'([^\']*)\''
+            args = []
+            for match in re.finditer(regex, cmd_string):
+                args.append(match.group(1) or match.group(2) or match.group(0))
+            return args
+
+        # Convert command to a list if it is a string
+        command_list = (
+            command if isinstance(command, list) else parse_docker_cmd(command)
+        )
+
+        # Build the service override dictionary
+        return {"TaskTemplate": {"ContainerSpec": {"Command": command_list}}}
+
     @retry(times=3, exceptions=COMMON_ERRORS)
     def get_system_info(self):
         response = self.session.get(
@@ -318,6 +350,15 @@ class CaproverAPI:
                     caprover_extras.get("containerHttpPort", 80)
                 )
 
+                # Parse command (if it exists) into service update override
+                command = service_data.get("command")
+                service_update_override = None
+                if command:
+                    service_override_dict = self._parse_command(command)
+                    service_update_override = yaml.dump(
+                        service_override_dict, default_style="|"
+                    )
+
                 # create app
                 self.create_app(
                     app_name=service_name,
@@ -332,6 +373,7 @@ class CaproverAPI:
                     environment_variables=environment_variables,
                     expose_as_web_app=expose_as_web_app,
                     container_http_port=container_http_port,
+                    serviceUpdateOverride=service_update_override,
                     tags=tags,
                 )
                 image_name = service_data.get("image")
