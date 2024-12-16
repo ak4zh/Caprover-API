@@ -24,7 +24,6 @@ automated deploy::
     }
     cap.deploy_one_click_app(
         one_click_app_name='redis',
-        namespace='new-app',
         app_variables=app_variables,
         automated=True
     )
@@ -33,8 +32,14 @@ automated deploy::
 manual deploy (you will be asked to enter required variables during runtime)::
 
     cap.deploy_one_click_app(
+        one_click_app_name='redis'
+    )
+
+rename app (to install under a different name than the name in the one-click repo)::
+
+    cap.deploy_one_click_app(
         one_click_app_name='redis',
-        namespace='new-app',
+        app_name='cache'
     )
 
 

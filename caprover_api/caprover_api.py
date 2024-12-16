@@ -290,16 +290,19 @@ class CaproverAPI:
         return {}
 
     def deploy_one_click_app(
-        self, one_click_app_name: str, namespace: str,
-        app_variables: dict = None, automated: bool = False,
-        one_click_repository: str = PUBLIC_ONE_CLICK_APP_PATH
+        self,
+        one_click_app_name: str,
+        app_name: str = None,
+        app_variables: dict = None,
+        automated: bool = False,
+        one_click_repository: str = PUBLIC_ONE_CLICK_APP_PATH,
     ):
         """
         Deploys a one-click app on the CapRover platform.
 
-        :param one_click_app_name: one click app name
-        :param namespace: a namespace to use for all services
-            inside the one-click app
+        :param one_click_app_name: one click app name in the repository
+        :param app_name: The name under which the app will be installed.
+            (optional) If unset, the `one_click_app_name` will be used.
         :param app_variables: dict containing required app variables
         :param automated: set to true
             if you have supplied all required variables
@@ -307,13 +310,14 @@ class CaproverAPI:
         :return dict containing the deployment "status" and "description".
         """
         app_variables = app_variables or {}
-        cap_app_name = "{}-{}".format(namespace, one_click_app_name)
+        if not app_name:
+            app_name = one_click_app_name
         raw_app_definition = self._download_one_click_app_defn(
             one_click_repository, one_click_app_name
         )
         resolved_app_data = self._resolve_app_variables(
             raw_app_definition=raw_app_definition,
-            cap_app_name=cap_app_name,
+            cap_app_name=app_name,
             app_variables=app_variables,
             automated=automated
         )
@@ -334,6 +338,8 @@ class CaproverAPI:
                         )
                     )
                     continue
+
+                tags = [{"tagName": app_name}]
                 has_persistent_data = bool(service_data.get("volumes"))
                 persistent_directories = service_data.get("volumes", [])
                 environment_variables = service_data.get("environment", {})
@@ -368,6 +374,7 @@ class CaproverAPI:
                     expose_as_web_app=expose_as_web_app,
                     container_http_port=container_http_port,
                     serviceUpdateOverride=service_update_override,
+                    tags=tags,
                 )
                 image_name = service_data.get("image")
                 docker_file_lines = caprover_extras.get("dockerfileLines")
