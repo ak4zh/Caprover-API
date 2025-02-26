@@ -32,6 +32,7 @@ Features
 * update app with port mappings, env variables, repo info etc
 * deploy one click apps
 * get list of all apps
+* get list of all projects
 * get app by name
 * delete app
 * delete app and it's volumes
@@ -86,10 +87,18 @@ rename app (to install under a different name than the name in the one-click rep
 Custom Apps
 ^^^^^^^^^^^^
 
-create a new app::
+create a new app (if project_id is not specified, app will be created in root <no parent project>)::
 
     cap.create_app(
         app_name="new-app",
+        has_persistent_data=False
+    )
+
+create a new app under an existing project::
+
+    cap.create_app(
+        app_name="new-app",
+        project_id="9b402fa8-423a-423a-8c2e-0c5498d21774",
         has_persistent_data=False
     )
 
