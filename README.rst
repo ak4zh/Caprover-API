@@ -87,7 +87,7 @@ rename app (to install under a different name than the name in the one-click rep
 Custom Apps
 ^^^^^^^^^^^^
 
-create a new app::
+create a new app (if project_id is not specified, app will be created in root <no parent project>)::
 
     cap.create_app(
         app_name="new-app",
