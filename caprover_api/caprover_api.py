@@ -534,7 +534,7 @@ class CaproverAPI:
     ):
         """
         :param app_name: app name
-        :param project_id: project id
+        :param project_id: leave it emtpy to create in root <no parent project>
         :param has_persistent_data: true if requires persistent data
         :param wait_for_app_build: set false to skip waiting
         :return:
@@ -742,7 +742,7 @@ class CaproverAPI:
     ):
         """
         :param app_name: app name
-        :param project_id: project id
+        :param project_id: leave it emtpy to create in root <no parent project>
         :param has_persistent_data: set to true to use persistent dirs
         :param custom_domain: custom domain for app
         :param enable_ssl: set to true to enable ssl
