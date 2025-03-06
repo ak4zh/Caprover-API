@@ -70,6 +70,7 @@ class CaproverAPI:
     LOGIN_PATH = '/api/v2/login'
     SYSTEM_INFO_PATH = "/api/v2/user/system/info"
     APP_LIST_PATH = "/api/v2/user/apps/appDefinitions"
+    APP_LIST_PROJECTS = "/api/v2/user/projects"    
     APP_REGISTER_PATH = '/api/v2/user/apps/appDefinitions/register'
     APP_DELETE_PATH = '/api/v2/user/apps/appDefinitions/delete'
     ADD_CUSTOM_DOMAIN_PATH = '/api/v2/user/apps/appDefinitions/customdomain'
@@ -278,6 +279,14 @@ class CaproverAPI:
     def list_apps(self):
         response = self.session.get(
             self._build_url(CaproverAPI.APP_LIST_PATH),
+            headers=self.headers
+        )
+        return CaproverAPI._check_errors(response.json())
+
+    @retry(times=3, exceptions=COMMON_ERRORS)
+    def list_projects(self):
+        response = self.session.get(
+            self._build_url(CaproverAPI.APP_LIST_PROJECTS),
             headers=self.headers
         )
         return CaproverAPI._check_errors(response.json())
@@ -519,11 +528,13 @@ class CaproverAPI:
     @retry(times=3, exceptions=COMMON_ERRORS)
     def create_app(
         self, app_name: str,
+        project_id: str = '',
         has_persistent_data: bool = False,
         wait_for_app_build: bool = True
     ):
         """
         :param app_name: app name
+        :param project_id: leave it emtpy to create in root <no parent project>
         :param has_persistent_data: true if requires persistent data
         :param wait_for_app_build: set false to skip waiting
         :return:
@@ -532,7 +543,7 @@ class CaproverAPI:
             ('detached', '1'),
         )
         data = json.dumps(
-            {"appName": app_name, "hasPersistentData": has_persistent_data}
+            {"appName": app_name, "projectId": project_id, "hasPersistentData": has_persistent_data}
         )
         logging.info("Creating new app: {}".format(app_name))
         response = self.session.post(
@@ -590,6 +601,7 @@ class CaproverAPI:
     def update_app(
         self,
         app_name: str,
+        project_id: str = None,
         instance_count: int = None,
         captain_definition_path: str = None,
         environment_variables: dict = None,
@@ -609,6 +621,7 @@ class CaproverAPI:
     ):
         """
         :param app_name: name of the app you want to update
+        :param project_id: project id of the project you want to move this app to
         :param instance_count: instances count, set 0 to stop the app
         :param captain_definition_path: captain-definition file relative path
         :param environment_variables: dict of env variables
@@ -688,6 +701,7 @@ class CaproverAPI:
             ports = None
         _data = {
             "appName": app_name,
+            "projectId": project_id,
             "instanceCount": instance_count,
             "preDeployFunction": pre_deploy_function,
             "captainDefinitionRelativeFilePath": captain_definition_path,
@@ -720,13 +734,15 @@ class CaproverAPI:
         return CaproverAPI._check_errors(response.json())
 
     def create_and_update_app(
-        self, app_name: str, has_persistent_data: bool = False,
+        self, app_name: str, project_id: str = '', 
+        has_persistent_data: bool = False,
         custom_domain: str = None, enable_ssl: bool = False,
         image_name: str = None, docker_file_lines: list = None,
         instance_count: int = 1, **kwargs
     ):
         """
         :param app_name: app name
+        :param project_id: leave it emtpy to create in root <no parent project>
         :param has_persistent_data: set to true to use persistent dirs
         :param custom_domain: custom domain for app
         :param enable_ssl: set to true to enable ssl
@@ -740,7 +756,8 @@ class CaproverAPI:
         if kwargs.get("persistent_directories"):
             has_persistent_data = True
         response = self.create_app(
-            app_name=app_name, has_persistent_data=has_persistent_data
+            app_name=app_name, project_id=project_id,
+            has_persistent_data=has_persistent_data
         )
         if custom_domain:
             time.sleep(0.10)
@@ -756,12 +773,14 @@ class CaproverAPI:
             time.sleep(0.10)
             response = self.update_app(
                 app_name=app_name,
+                project_id=project_id,
                 instance_count=instance_count,
                 **kwargs
             )
         if image_name or docker_file_lines:
             response = self.deploy_app(
                 app_name=app_name,
+                project_id=project_id,
                 image_name=image_name,
                 docker_file_lines=docker_file_lines
             )
