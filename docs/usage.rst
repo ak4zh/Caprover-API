@@ -107,7 +107,7 @@ add environment variables and volumes to app::
         persistent_directories=persistent_directories
     )
 
-add environment variables and volumes to app::
+add environment variables and volumes and port mappings to app::
 
     environment_variables = {
         "key1": "val1",
@@ -154,6 +154,13 @@ create app and deploy redis from docker hub::
         persistent_directories=['new-app-redis-data:/data', ]
     )
 
+replace tags on an app::
+
+    cap.update_app(app_name="new-app", tags=["tag1", "tag2"])
+
+clear all tags from an app::
+
+    cap.update_app(app_name="new-app", tags=[])  # set to empty list
 
 delete an app::
 
