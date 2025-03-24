@@ -305,6 +305,7 @@ class CaproverAPI:
         app_variables: dict = None,
         automated: bool = False,
         one_click_repository: str = PUBLIC_ONE_CLICK_APP_PATH,
+        tags: list[str] = None,
     ):
         """
         Deploys a one-click app on the CapRover platform.
@@ -316,11 +317,19 @@ class CaproverAPI:
         :param automated: set to true
             if you have supplied all required variables
         :param one_click_repository: where to download the one-click app from
+        :param tags: list of tags to apply to all services
+            (optional) If unset (None), a tag with the app_name will be used.
+            Pass an empty list to create no tags.
         :return dict containing the deployment "status" and "description".
         """
         app_variables = app_variables or {}
         if not app_name:
             app_name = one_click_app_name
+
+        # Default tag is the app_name if no custom tags provided
+        if tags is None:
+            tags = [app_name]
+
         raw_app_definition = self._download_one_click_app_defn(
             one_click_repository, one_click_app_name
         )
@@ -348,7 +357,6 @@ class CaproverAPI:
                     )
                     continue
 
-                tags = [{"tagName": app_name}]
                 has_persistent_data = bool(service_data.get("volumes"))
                 persistent_directories = service_data.get("volumes", [])
                 environment_variables = service_data.get("environment", {})
@@ -617,6 +625,7 @@ class CaproverAPI:
         app_push_webhook: dict = None,
         repo_info: dict = None,
         http_auth: dict = None,
+        tags: list[str] = None,
         **kwargs,
     ):
         """
@@ -646,6 +655,11 @@ class CaproverAPI:
             fields repo, user, password, sshKey, branch
         :param http_auth: dict with http auth info
             fields user, password
+        :param tags: list of strings to set as the app tags, allowing to better
+            group and view your apps in the table.
+            If a list is passed, it replaces the entire set of tags on the app.
+            Set to None (default) to leave tags as-is,
+            or pass an empty list to clear existing tags.
         :return: dict
         """
         current_app_info = self.get_app(app_name=app_name)
@@ -715,6 +729,7 @@ class CaproverAPI:
             "appPushWebhook": app_push_webhook,
             "serviceUpdateOverride": service_update_override,
             "httpAuth": http_auth,
+            "tags": None if tags is None else [{"tagName": t} for t in tags],
         }
         for k, v in _data.items():
             if v is None:
