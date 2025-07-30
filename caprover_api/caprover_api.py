@@ -41,8 +41,7 @@ def retry(times: int, exceptions: tuple = Exception):
     return decorator
 
 
-PUBLIC_ONE_CLICK_APP_PATH = "https://raw.githubusercontent.com/" \
-                                "caprover/one-click-apps/master/public/v4/apps/"
+PUBLIC_ONE_CLICK_APP_PATH = "https://oneclickapps.caprover.com/v4/apps/"
 
 class CaproverAPI:
     class Status:
@@ -132,7 +131,7 @@ class CaproverAPI:
         :return raw_app_definition (str) containing YAML
         """
         raw_app_definition = requests.get(
-            repository_path + one_click_app_name + ".yml"
+            repository_path + one_click_app_name
         ).text
         return raw_app_definition
 
