@@ -795,7 +795,6 @@ class CaproverAPI:
         if image_name or docker_file_lines:
             response = self.deploy_app(
                 app_name=app_name,
-                project_id=project_id,
                 image_name=image_name,
                 docker_file_lines=docker_file_lines
             )
