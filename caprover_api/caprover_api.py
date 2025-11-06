@@ -1,38 +1,80 @@
 import datetime
+import functools
 import json
+import logging
 import os
 import re
-import time
 import secrets
-import logging
+import time
+from collections import Counter, namedtuple
 
 import requests
 import yaml
 
 
-def retry(times: int, exceptions: tuple = Exception):
+class TooManyRequestsError(Exception):
+    """Raised when we encounter HTTP 429 response from CapRover.
+
+    CapRover uses this status to do its own locking to prevent certain
+    concurrent operations.
+    There's no problem retrying it until the lock is released.
+    """
+    pass
+
+
+RetrySettings = namedtuple("RetrySettings", ("times", "delay"))
+
+# Retry behavior depends on what happened:
+# - TooManyRequestsError -> 15s delay, max 6 tries
+# - requests.ConnectionError -> 1s delay, max 3 tries
+TRANSIENT_ERRORS = {
+    TooManyRequestsError: RetrySettings(6, 15),
+    requests.exceptions.ConnectionError: RetrySettings(3, 1),
+}
+
+
+def retry(exception_settings: dict[Exception, RetrySettings]):
     """
     Retry Decorator
-    Retries the wrapped function/method `times` times if the exceptions listed
-    in ``exceptions`` are thrown
-    :param times: The number of times to repeat the wrapped function/method
-    :param exceptions: tuple of exceptions that trigger a retry attempt
+    Retries the wrapped function/method if the exceptions that key
+    ``exception_settings`` are thrown.
+
+    :param exception_settings: exceptions that trigger a retry attempt,
+        mapping to the retry configuration for that exception.
+        Retry tracking is per-class in this dict.
     """
+
     def decorator(func):
-        def new_function(*args, **kwargs):
-            attempt = 0
-            while attempt < times:
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            retries_by_exc = Counter()
+
+            while True:
                 try:
                     return func(*args, **kwargs)
-                except exceptions:
-                    logging.error(
-                        'Exception thrown when attempting to run %s, attempt '
-                        '%d of %d' % (func, attempt, times)
-                    )
-                    attempt += 1
-                    time.sleep(1)
-            return func(*args, **kwargs)
-        return new_function
+                except tuple(exception_settings.keys()) as e:
+                    # Determine the exc type to look up its settings.
+                    # Must iteratively call isinstance to be inheritance-aware.
+                    for key, settings in exception_settings.items():
+                        if isinstance(e, key):
+                            exc_type = key
+                            break
+
+                    if retries_by_exc[exc_type] < settings.times:
+                        retries_by_exc[exc_type] += 1
+                        logging.error(
+                            "%s raised %s. "
+                            "Waiting %ds before retry attempt %d of %d",
+                            func.__name__,
+                            exc_type.__name__,
+                            settings.delay,
+                            retries_by_exc[exc_type],
+                            settings.times,
+                        )
+                        time.sleep(settings.delay)
+                    else:
+                        raise  # exhausted retries
+        return wrapper
     return decorator
 
 
@@ -58,8 +100,6 @@ class CaproverAPI:
         NOT_FOUND = 1111
         AUTHENTICATION_FAILED = 1112
         STATUS_PASSWORD_BACK_OFF = 1113
-
-    COMMON_ERRORS = (requests.exceptions.ConnectionError, )
 
     LOGIN_PATH = '/api/v2/login'
     SYSTEM_INFO_PATH = "/api/v2/user/system/info"
@@ -108,16 +148,24 @@ class CaproverAPI:
         return self.base_url + api_endpoint
 
     @staticmethod
-    def _check_errors(response: dict):
-        description = response.get('description', '')
-        if response['status'] not in [
+    def _check_errors(response: requests.Response):
+        # Check for HTTP status code 429, which is likely to
+        # be retried because it's in COMMON_ERRORS.
+        if response.status_code == 429:
+            raise TooManyRequestsError(
+                f"HTTP 429 Too Many Requests for {response.url}"
+            )
+
+        response_json = response.json()
+        description = response_json.get('description', '')
+        if response_json['status'] not in [
             CaproverAPI.Status.STATUS_OK,
             CaproverAPI.Status.STATUS_OK_PARTIALLY
         ]:
             logging.error(description)
-            raise Exception(response['description'])
+            raise Exception(description)
         logging.info(description)
-        return response
+        return response_json
 
     @staticmethod
     def _download_one_click_app_defn(repository_path: str, one_click_app_name: str):
@@ -236,23 +284,23 @@ class CaproverAPI:
         # Build the service override dictionary
         return {"TaskTemplate": {"ContainerSpec": {"Command": command_list}}}
 
-    @retry(times=3, exceptions=COMMON_ERRORS)
+    @retry(TRANSIENT_ERRORS)
     def get_system_info(self):
         response = self.session.get(
             self._build_url(CaproverAPI.SYSTEM_INFO_PATH), headers=self.headers
         )
-        return CaproverAPI._check_errors(response.json())
+        return CaproverAPI._check_errors(response)
 
-    @retry(times=3, exceptions=COMMON_ERRORS)
+    @retry(TRANSIENT_ERRORS)
     def get_app_info(self, app_name):
         logging.info("Getting app info...")
         response = self.session.get(
             self._build_url(CaproverAPI.APP_DATA_PATH) + '/' + app_name,
             headers=self.headers
         )
-        return CaproverAPI._check_errors(response.json())
+        return CaproverAPI._check_errors(response)
 
-    @retry(times=3, exceptions=COMMON_ERRORS)
+    @retry(TRANSIENT_ERRORS)
     def _wait_until_app_ready(self, app_name):
         timeout = 60
         while timeout:
@@ -270,21 +318,21 @@ class CaproverAPI:
             raise Exception("App building failed")
         return app_info
 
-    @retry(times=3, exceptions=COMMON_ERRORS)
+    @retry(TRANSIENT_ERRORS)
     def list_apps(self):
         response = self.session.get(
             self._build_url(CaproverAPI.APP_LIST_PATH),
             headers=self.headers
         )
-        return CaproverAPI._check_errors(response.json())
+        return CaproverAPI._check_errors(response)
 
-    @retry(times=3, exceptions=COMMON_ERRORS)
+    @retry(TRANSIENT_ERRORS)
     def list_projects(self):
         response = self.session.get(
             self._build_url(CaproverAPI.APP_LIST_PROJECTS),
             headers=self.headers
         )
-        return CaproverAPI._check_errors(response.json())
+        return CaproverAPI._check_errors(response)
 
     def get_app(self, app_name: str):
         app_list = self.list_apps()
@@ -396,16 +444,14 @@ class CaproverAPI:
                     docker_file_lines=docker_file_lines
                 )
                 apps_deployed.append(service_name)
-        return CaproverAPI._check_errors(
-            {
-                "status": CaproverAPI.Status.STATUS_OK,
-                "description": "Deployed all services in >>{}<<".format(
-                    one_click_app_name
-                )
-            }
-        )
+        return {
+            "status": CaproverAPI.Status.STATUS_OK,
+            "description": "Deployed all services in >>{}<<".format(
+                one_click_app_name
+            )
+        }
 
-    @retry(times=3, exceptions=COMMON_ERRORS)
+    @retry(TRANSIENT_ERRORS)
     def deploy_app(
         self, app_name: str,
         image_name: str = None,
@@ -439,13 +485,13 @@ class CaproverAPI:
             ) + '/' + app_name,
             headers=self.headers, data=data
         )
-        self._check_errors(response.json())
+        self._check_errors(response)
         self._wait_until_app_ready(app_name=app_name)
         time.sleep(0.50)
         self._ensure_app_build_success(app_name=app_name)
         return response.json()
 
-    @retry(times=3, exceptions=COMMON_ERRORS)
+    @retry(TRANSIENT_ERRORS)
     def _login(self):
         data = json.dumps({"password": self.password})
         logging.info("Attempting to login to caprover dashboard...")
@@ -453,9 +499,9 @@ class CaproverAPI:
             self._build_url(CaproverAPI.LOGIN_PATH),
             headers=self.headers, data=data
         )
-        return CaproverAPI._check_errors(response.json())
+        return CaproverAPI._check_errors(response)
 
-    @retry(times=3, exceptions=COMMON_ERRORS)
+    @retry(TRANSIENT_ERRORS)
     def stop_app(self, app_name: str):
         return self.update_app(app_name=app_name, instance_count=0)
 
@@ -495,7 +541,7 @@ class CaproverAPI:
             "status": CaproverAPI.Status.STATUS_OK
         }
 
-    @retry(times=3, exceptions=COMMON_ERRORS)
+    @retry(TRANSIENT_ERRORS)
     def delete_app(self, app_name, delete_volumes: bool = False):
         """
         :param app_name: app name
@@ -526,9 +572,9 @@ class CaproverAPI:
             self._build_url(CaproverAPI.APP_DELETE_PATH),
             headers=self.headers, data=data
         )
-        return CaproverAPI._check_errors(response.json())
+        return CaproverAPI._check_errors(response)
 
-    @retry(times=3, exceptions=COMMON_ERRORS)
+    @retry(TRANSIENT_ERRORS)
     def create_app(
         self, app_name: str,
         project_id: str = '',
@@ -555,9 +601,9 @@ class CaproverAPI:
         )
         if wait_for_app_build:
             self._wait_until_app_ready(app_name=app_name)
-        return CaproverAPI._check_errors(response.json())
+        return CaproverAPI._check_errors(response)
 
-    @retry(times=3, exceptions=COMMON_ERRORS)
+    @retry(TRANSIENT_ERRORS)
     def add_domain(self, app_name: str, custom_domain: str):
         """
         :param app_name:
@@ -571,9 +617,9 @@ class CaproverAPI:
             self._build_url(CaproverAPI.ADD_CUSTOM_DOMAIN_PATH),
             headers=self.headers, data=data
         )
-        return CaproverAPI._check_errors(response.json())
+        return CaproverAPI._check_errors(response)
 
-    @retry(times=3, exceptions=COMMON_ERRORS)
+    @retry(TRANSIENT_ERRORS)
     def enable_ssl(self, app_name: str, custom_domain: str = None):
         """Enable SSL on a domain.
 
@@ -598,9 +644,9 @@ class CaproverAPI:
             self._build_url(path),
             headers=self.headers, data=data
         )
-        return CaproverAPI._check_errors(response.json())
+        return CaproverAPI._check_errors(response)
 
-    @retry(times=3, exceptions=COMMON_ERRORS)
+    @retry(TRANSIENT_ERRORS)
     def update_app(
         self,
         app_name: str,
@@ -741,7 +787,7 @@ class CaproverAPI:
             self._build_url(CaproverAPI.UPDATE_APP_PATH),
             headers=self.headers, data=json.dumps(current_app_info)
         )
-        return CaproverAPI._check_errors(response.json())
+        return CaproverAPI._check_errors(response)
 
     def create_and_update_app(
         self, app_name: str, project_id: str = '', 
@@ -837,7 +883,7 @@ class CaproverAPI:
             self._build_url(CaproverAPI.CREATE_BACKUP_PATH),
             headers=self.headers, data=data
         )
-        return CaproverAPI._check_errors(response.json())
+        return CaproverAPI._check_errors(response)
 
     def _download_backup(self, download_token, file_name):
         response = self.session.get(
@@ -877,4 +923,4 @@ class CaproverAPI:
             self._build_url(CaproverAPI.TRIGGER_BUILD_PATH),
             headers=self.headers, params=params, data=data
         )
-        return CaproverAPI._check_errors(response.json())
+        return CaproverAPI._check_errors(response)
