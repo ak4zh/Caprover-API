@@ -15,6 +15,16 @@ except ImportError:
     from yaml import Loader
 
 
+class TooManyRequestsError(Exception):
+    """Raised when we encounter HTTP 429 response from CapRover.
+
+    CapRover uses this status to do its own locking to prevent certain
+    concurrent operations.
+    There's no problem retrying it until the lock is released.
+    """
+    pass
+
+
 def retry(times: int, exceptions: tuple = Exception):
     """
     Retry Decorator
@@ -65,7 +75,7 @@ class CaproverAPI:
         AUTHENTICATION_FAILED = 1112
         STATUS_PASSWORD_BACK_OFF = 1113
 
-    COMMON_ERRORS = (requests.exceptions.ConnectionError, )
+    COMMON_ERRORS = (requests.exceptions.ConnectionError, TooManyRequestsError)
 
     LOGIN_PATH = '/api/v2/login'
     SYSTEM_INFO_PATH = "/api/v2/user/system/info"
@@ -114,16 +124,24 @@ class CaproverAPI:
         return self.base_url + api_endpoint
 
     @staticmethod
-    def _check_errors(response: dict):
-        description = response.get('description', '')
-        if response['status'] not in [
+    def _check_errors(response: requests.Response):
+        # Check for HTTP status code 429, which is likely to
+        # be retried because it's in COMMON_ERRORS.
+        if response.status_code == 429:
+            raise TooManyRequestsError(
+                f"HTTP 429 Too Many Requests for {response.url}"
+            )
+
+        response_json = response.json()
+        description = response_json.get('description', '')
+        if response_json['status'] not in [
             CaproverAPI.Status.STATUS_OK,
             CaproverAPI.Status.STATUS_OK_PARTIALLY
         ]:
             logging.error(description)
-            raise Exception(response['description'])
+            raise Exception(description)
         logging.info(description)
-        return response
+        return response_json
 
     @staticmethod
     def _download_one_click_app_defn(repository_path: str, one_click_app_name: str):
@@ -246,7 +264,7 @@ class CaproverAPI:
         response = self.session.get(
             self._build_url(CaproverAPI.SYSTEM_INFO_PATH), headers=self.headers
         )
-        return CaproverAPI._check_errors(response.json())
+        return CaproverAPI._check_errors(response)
 
     @retry(times=3, exceptions=COMMON_ERRORS)
     def get_app_info(self, app_name):
@@ -255,7 +273,7 @@ class CaproverAPI:
             self._build_url(CaproverAPI.APP_DATA_PATH) + '/' + app_name,
             headers=self.headers
         )
-        return CaproverAPI._check_errors(response.json())
+        return CaproverAPI._check_errors(response)
 
     @retry(times=3, exceptions=COMMON_ERRORS)
     def _wait_until_app_ready(self, app_name):
@@ -281,7 +299,7 @@ class CaproverAPI:
             self._build_url(CaproverAPI.APP_LIST_PATH),
             headers=self.headers
         )
-        return CaproverAPI._check_errors(response.json())
+        return CaproverAPI._check_errors(response)
 
     @retry(times=3, exceptions=COMMON_ERRORS)
     def list_projects(self):
@@ -289,7 +307,7 @@ class CaproverAPI:
             self._build_url(CaproverAPI.APP_LIST_PROJECTS),
             headers=self.headers
         )
-        return CaproverAPI._check_errors(response.json())
+        return CaproverAPI._check_errors(response)
 
     def get_app(self, app_name: str):
         app_list = self.list_apps()
@@ -401,14 +419,12 @@ class CaproverAPI:
                     docker_file_lines=docker_file_lines
                 )
                 apps_deployed.append(service_name)
-        return CaproverAPI._check_errors(
-            {
-                "status": CaproverAPI.Status.STATUS_OK,
-                "description": "Deployed all services in >>{}<<".format(
-                    one_click_app_name
-                )
-            }
-        )
+        return {
+            "status": CaproverAPI.Status.STATUS_OK,
+            "description": "Deployed all services in >>{}<<".format(
+                one_click_app_name
+            )
+        }
 
     @retry(times=3, exceptions=COMMON_ERRORS)
     def deploy_app(
@@ -444,7 +460,7 @@ class CaproverAPI:
             ) + '/' + app_name,
             headers=self.headers, data=data
         )
-        self._check_errors(response.json())
+        self._check_errors(response)
         self._wait_until_app_ready(app_name=app_name)
         time.sleep(0.50)
         self._ensure_app_build_success(app_name=app_name)
@@ -458,7 +474,7 @@ class CaproverAPI:
             self._build_url(CaproverAPI.LOGIN_PATH),
             headers=self.headers, data=data
         )
-        return CaproverAPI._check_errors(response.json())
+        return CaproverAPI._check_errors(response)
 
     @retry(times=3, exceptions=COMMON_ERRORS)
     def stop_app(self, app_name: str):
@@ -531,7 +547,7 @@ class CaproverAPI:
             self._build_url(CaproverAPI.APP_DELETE_PATH),
             headers=self.headers, data=data
         )
-        return CaproverAPI._check_errors(response.json())
+        return CaproverAPI._check_errors(response)
 
     @retry(times=3, exceptions=COMMON_ERRORS)
     def create_app(
@@ -560,7 +576,7 @@ class CaproverAPI:
         )
         if wait_for_app_build:
             self._wait_until_app_ready(app_name=app_name)
-        return CaproverAPI._check_errors(response.json())
+        return CaproverAPI._check_errors(response)
 
     @retry(times=3, exceptions=COMMON_ERRORS)
     def add_domain(self, app_name: str, custom_domain: str):
@@ -576,7 +592,7 @@ class CaproverAPI:
             self._build_url(CaproverAPI.ADD_CUSTOM_DOMAIN_PATH),
             headers=self.headers, data=data
         )
-        return CaproverAPI._check_errors(response.json())
+        return CaproverAPI._check_errors(response)
 
     @retry(times=3, exceptions=COMMON_ERRORS)
     def enable_ssl(self, app_name: str, custom_domain: str = None):
@@ -603,7 +619,7 @@ class CaproverAPI:
             self._build_url(path),
             headers=self.headers, data=data
         )
-        return CaproverAPI._check_errors(response.json())
+        return CaproverAPI._check_errors(response)
 
     @retry(times=3, exceptions=COMMON_ERRORS)
     def update_app(
@@ -746,7 +762,7 @@ class CaproverAPI:
             self._build_url(CaproverAPI.UPDATE_APP_PATH),
             headers=self.headers, data=json.dumps(current_app_info)
         )
-        return CaproverAPI._check_errors(response.json())
+        return CaproverAPI._check_errors(response)
 
     def create_and_update_app(
         self, app_name: str, project_id: str = '', 
@@ -842,7 +858,7 @@ class CaproverAPI:
             self._build_url(CaproverAPI.CREATE_BACKUP_PATH),
             headers=self.headers, data=data
         )
-        return CaproverAPI._check_errors(response.json())
+        return CaproverAPI._check_errors(response)
 
     def _download_backup(self, download_token, file_name):
         response = self.session.get(
@@ -882,4 +898,4 @@ class CaproverAPI:
             self._build_url(CaproverAPI.TRIGGER_BUILD_PATH),
             headers=self.headers, params=params, data=data
         )
-        return CaproverAPI._check_errors(response.json())
+        return CaproverAPI._check_errors(response)
