@@ -9,11 +9,6 @@ import logging
 import requests
 import yaml
 
-try:
-    from yaml import CLoader as Loader
-except ImportError:
-    from yaml import Loader
-
 
 def retry(times: int, exceptions: tuple = Exception):
     """
@@ -41,8 +36,7 @@ def retry(times: int, exceptions: tuple = Exception):
     return decorator
 
 
-PUBLIC_ONE_CLICK_APP_PATH = "https://raw.githubusercontent.com/" \
-                                "caprover/one-click-apps/master/public/v4/apps/"
+PUBLIC_ONE_CLICK_APP_PATH = "https://oneclickapps.caprover.com/v4/apps/"
 
 class CaproverAPI:
     class Status:
@@ -129,12 +123,13 @@ class CaproverAPI:
     def _download_one_click_app_defn(repository_path: str, one_click_app_name: str):
         """Retrieve the raw app definition from the public one-click app repository.
 
-        :return raw_app_definition (str) containing YAML
+        :return raw_app_definition (str) containing JSON
         """
-        raw_app_definition = requests.get(
-            repository_path + one_click_app_name + ".yml"
-        ).text
-        return raw_app_definition
+        r = requests.get(
+            repository_path + one_click_app_name
+        )
+        r.raise_for_status()
+        return r.text
 
     def _resolve_app_variables(
         self, raw_app_definition, cap_app_name,
@@ -150,7 +145,7 @@ class CaproverAPI:
         either raise an exception (if `automated` is True) or prompt the user to enter a
         valid value.
 
-        :param raw_app_definition (str): The unparsed YAML text of the one-click app definition.
+        :param raw_app_definition (str): The unparsed JSON text of the one-click app definition.
         :param cap_app_name (str): The name under which the app will be installed.
         :param app_variables (dict): A dictionary of $$cap_variables and their values.
                 This will get updated to also include the $$cap_appname and $$cap_root domain.
@@ -176,7 +171,7 @@ class CaproverAPI:
                 "$$cap_root_domain": self.root_domain
             }
         )
-        _app_data = yaml.load(raw_app_data, Loader=Loader)
+        _app_data = json.loads(raw_app_data)
 
         variables = _app_data.get(
             "caproverOneClickApp", {}
@@ -339,7 +334,7 @@ class CaproverAPI:
             app_variables=app_variables,
             automated=automated
         )
-        app_data = yaml.load(resolved_app_data, Loader=Loader)
+        app_data = json.loads(resolved_app_data)
         services = app_data.get('services')
         apps_to_deploy = list(services.keys())
         apps_deployed = []

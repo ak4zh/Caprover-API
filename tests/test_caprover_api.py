@@ -25,32 +25,52 @@ class TestAppVariables(unittest.TestCase):
             self.api.root_domain = (
                 "example.com"  # This is used by _resolve_app_variables
             )
-        self.raw_yaml = """
-captainVersion: 4
-services:
-  $$cap_appname:
-    image: $$cap_docker_image
-    environment:
-      SECRET: $$cap_gen_random_hex(10)
-      VRD: $$cap_var_with_random_default
-      VSD: $$cap_var_with_static_default
-
-caproverOneClickApp:
-  variables:
-    - id: '$$cap_docker_image'
-      label: Docker Image
-    - id: '$$cap_var_with_random_default'
-      label: Var with random default
-      defaultValue: '$$cap_gen_random_hex(6)'
-    - id: '$$cap_var_with_static_default'
-      label: Var with static default
-      defaultValue: 'Abcde'
-"""
+        # This is the JSON that's built by `npm run build`
+        # as described at
+        # https://github.com/caprover/one-click-apps/blob/master/README.md#build-your-own-one-click-app-repository
+        self.raw_json_appdef = """
+            {
+                "captainVersion": 4,
+                "services": {
+                    "$$cap_appname": {
+                        "image": "$$cap_docker_image",
+                        "environment": {
+                            "SECRET": "$$cap_gen_random_hex(10)",
+                            "VRD": "$$cap_var_with_random_default",
+                            "VSD": "$$cap_var_with_static_default"
+                        }
+                    }
+                },
+                "caproverOneClickApp": {
+                    "variables": [
+                        {
+                            "id": "$$cap_docker_image",
+                            "label": "Docker Image"
+                        },
+                        {
+                            "id": "$$cap_var_with_random_default",
+                            "label": "Var with random default",
+                            "defaultValue": "$$cap_gen_random_hex(6)"
+                        },
+                        {
+                            "id": "$$cap_var_with_static_default",
+                            "label": "Var with static default",
+                            "defaultValue": "Abcde"
+                        }
+                    ],
+                    "description": "Transform Your Daily Life Forever!",
+                    "instructions": {
+                        "start": "ready set go",
+                        "end": "all done"
+                    }
+                }
+            }
+            """
 
     def test_appname_replacement(self):
         """Test that $$cap_appname is replaced correctly"""
         result = self.api._resolve_app_variables(
-            self.raw_yaml, "testapp", {}, automated=True
+            self.raw_json_appdef, "testapp", {}, automated=True
         )
         parsed = yaml.safe_load(result)
         self.assertIn("testapp", parsed["services"])
@@ -58,7 +78,7 @@ caproverOneClickApp:
     def test_override_default(self):
         """A defaultValue can be overridden by app_variables"""
         result = self.api._resolve_app_variables(
-            self.raw_yaml,
+            self.raw_json_appdef,
             "testapp",
             {"$$cap_var_with_static_default": "CustomValue"},
             automated=True,
@@ -71,7 +91,7 @@ caproverOneClickApp:
     def test_static_default_variable(self):
         """Variable with (static) defaultValue gets that value when not set"""
         result = self.api._resolve_app_variables(
-            self.raw_yaml, "testapp", {}, automated=True
+            self.raw_json_appdef, "testapp", {}, automated=True
         )
         parsed = yaml.safe_load(result)
         self.assertEqual(
@@ -81,7 +101,7 @@ caproverOneClickApp:
     def test_gen_random_hex_default_variable(self):
         """Variable with random default gets a random value when not set"""
         result = self.api._resolve_app_variables(
-            self.raw_yaml, "testapp", {}, automated=True
+            self.raw_json_appdef, "testapp", {}, automated=True
         )
         parsed = yaml.safe_load(result)
         self.assertRegex(
@@ -92,7 +112,7 @@ caproverOneClickApp:
     def test_gen_random_hex_in_service(self):
         """gen_random_hex is applied in service definitions (not just variables)"""
         result = self.api._resolve_app_variables(
-            self.raw_yaml, "testapp", {}, automated=True
+            self.raw_json_appdef, "testapp", {}, automated=True
         )
         parsed = yaml.safe_load(result)
         self.assertRegex(
